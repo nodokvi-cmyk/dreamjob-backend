@@ -6,6 +6,12 @@ export enum UserRole {
   ADMIN = 'admin',
 }
 
+export enum OtpPurpose {
+  EMAIL_VERIFICATION = 'emailVerification',
+  CURRENT_EMAIL_CHANGE = 'currentEmailChange',
+  NEW_EMAIL_CHANGE = 'newEmailChange',
+}
+
 @Schema({
   timestamps: true,
   toJSON: { virtuals: true },
@@ -45,6 +51,18 @@ export class User {
 
   @Prop({ type: Date, required: false, select: false })
   OTPCodeExpirationDate?: Date;
+
+  @Prop({ type: String, enum: OtpPurpose, required: false, select: false })
+  OTPPurpose?: OtpPurpose;
+
+  @Prop({
+    type: String,
+    required: false,
+    lowercase: true,
+    trim: true,
+    maxlength: 128,
+  })
+  pendingEmail?: string;
 
   @Prop({ type: String, default: '' })
   avatarKey!: string;
