@@ -1,12 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import bcrypt from 'bcrypt';
 import { Model } from 'mongoose';
+import { hashPassword } from '../shared/crypto/password.js';
 import { PaginationDto } from '../shared/dto/pagination.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { OtpPurpose, User, UserDocument } from './schema/user.schema.js';
-
-const PASSWORD_SALT_ROUNDS = 10;
 
 @Injectable()
 export class UsersService {
@@ -42,6 +40,12 @@ export class UsersService {
     return this.userModel.findOne({ email }).select('+password');
   }
 
+  findByEmailWithVerificationCode(email: string): Promise<UserDocument | null> {
+    return this.userModel
+      .findOne({ email })
+      .select('+OTPCode +OTPCodeExpirationDate +OTPPurpose');
+  }
+
   async setVerificationCode(
     email: string,
     otpHash: string,
@@ -60,6 +64,16 @@ export class UsersService {
     );
   }
 
+  async markEmailVerified(email: string): Promise<void> {
+    await this.userModel.updateOne(
+      { email },
+      {
+        $set: { isVerified: true },
+        $unset: { OTPCode: 1, OTPCodeExpirationDate: 1, OTPPurpose: 1 },
+      },
+    );
+  }
+
   async update(
     id: string,
     updateUserDto: UpdateUserDto,
@@ -73,7 +87,7 @@ export class UsersService {
     if (lastName) changes.lastName = lastName;
     if (birthDate) changes.birthDate = birthDate;
     if (password) {
-      changes.password = await bcrypt.hash(password, PASSWORD_SALT_ROUNDS);
+      changes.password = await hashPassword(password);
     }
 
     const user = await this.userModel.findByIdAndUpdate(id, changes, {

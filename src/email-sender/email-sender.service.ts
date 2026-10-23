@@ -7,9 +7,6 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { randomInt } from 'node:crypto';
 import { renderOtpEmail } from '../email/templates/otp-email.js';
-import { hashOtp } from '../shared/crypto/otp-hash.js';
-import { OtpPurpose } from '../users/schema/user.schema.js';
-import { UsersService } from '../users/users.service.js';
 import { MAIL_TRANSPORT } from './mail-transport.provider.js';
 import type { MailTransport } from './mail-transport.provider.js';
 
@@ -22,11 +19,6 @@ export class EmailSenderService {
   constructor(
     @Inject(MAIL_TRANSPORT) private readonly transport: MailTransport,
     private readonly config: ConfigService,
-    @Inject(UsersService)
-    private readonly users: Pick<
-      UsersService,
-      'findByEmail' | 'setVerificationCode'
-    >,
   ) {}
 
   createVerificationCode(): { code: string; expiresAt: Date } {
@@ -59,21 +51,5 @@ export class EmailSenderService {
         'Failed to send the verification email',
       );
     }
-  }
-
-  async resendVerificationCode(email: string): Promise<void> {
-    const user = await this.users.findByEmail(email);
-    if (!user || user.isVerified) return;
-
-    const { code, expiresAt } = this.createVerificationCode();
-    const otpHash = hashOtp(code, this.config.getOrThrow<string>('OTP_SECRET'));
-
-    await this.users.setVerificationCode(
-      email,
-      otpHash,
-      expiresAt,
-      OtpPurpose.EMAIL_VERIFICATION,
-    );
-    await this.sendVerificationCode(email, code);
   }
 }
