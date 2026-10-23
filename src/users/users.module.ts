@@ -10,5 +10,6 @@ import { User, userSchema } from './schema/user.schema.js';
   ],
   controllers: [UsersController],
   providers: [UsersService],
+  exports: [UsersService],
 })
 export class UsersModule {}

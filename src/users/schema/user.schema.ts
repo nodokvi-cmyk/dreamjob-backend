@@ -58,6 +58,7 @@ export class User {
   @Prop({
     type: String,
     required: false,
+    select: false,
     lowercase: true,
     trim: true,
     maxlength: 128,
