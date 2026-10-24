@@ -1,22 +1,22 @@
-import { UserRole } from '../../users/schema/user.schema.js';
+import { AuthRole } from './auth-role.js';
 
 export interface JwtPayload {
-  userId: string;
-  userRole: UserRole;
+  accountId: string;
+  accountRole: AuthRole;
 }
 
 const objectIdPattern = /^[a-f0-9]{24}$/i;
-const userRoles: readonly string[] = Object.values(UserRole);
+const authRoles: readonly string[] = Object.values(AuthRole);
 
 export const isJwtPayload = (value: unknown): value is JwtPayload => {
   if (typeof value !== 'object' || value === null) return false;
-  if (!('userId' in value) || !('userRole' in value)) return false;
+  if (!('accountId' in value) || !('accountRole' in value)) return false;
 
-  const { userId, userRole } = value;
+  const { accountId, accountRole } = value;
   return (
-    typeof userId === 'string' &&
-    objectIdPattern.test(userId) &&
-    typeof userRole === 'string' &&
-    userRoles.includes(userRole)
+    typeof accountId === 'string' &&
+    objectIdPattern.test(accountId) &&
+    typeof accountRole === 'string' &&
+    authRoles.includes(accountRole)
   );
 };

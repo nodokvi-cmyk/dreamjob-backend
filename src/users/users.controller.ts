@@ -11,13 +11,13 @@ import {
 } from '@nestjs/common';
 import { IsAuthGuard } from '../guards/is-auth.guard.js';
 import { RolesGuard } from '../guards/roles.guard.js';
+import { AccountId } from '../shared/decorators/account-id.decorator.js';
+import { AccountRole } from '../shared/decorators/account-role.decorator.js';
+import { Roles } from '../shared/decorators/roles.decorator.js';
 import { IsValidMongoIdDto } from '../shared/dto/is-valid-mongo-id.dto.js';
 import { PaginationDto } from '../shared/dto/pagination.dto.js';
-import { Roles } from './decorators/roles.decorator.js';
-import { UserId } from './decorators/user-id.decorator.js';
-import { UserRoleParam } from './decorators/user-role.decorator.js';
+import { AuthRole } from '../shared/types/auth-role.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
-import { UserRole } from './schema/user.schema.js';
 import { UsersService } from './users.service.js';
 
 @Controller('users')
@@ -26,7 +26,7 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  @Roles(UserRole.ADMIN)
+  @Roles(AuthRole.ADMIN)
   findAll(@Query() paginationDto: PaginationDto) {
     return this.usersService.findAll(paginationDto);
   }
@@ -34,43 +34,51 @@ export class UsersController {
   @Get(':id')
   findOne(
     @Param() { id }: IsValidMongoIdDto,
-    @UserId() userId: string,
-    @UserRoleParam() userRole: UserRole,
+    @AccountId() accountId: string,
+    @AccountRole() accountRole: AuthRole,
   ) {
-    this.assertSelfOrAdmin(id, userId, userRole);
+    this.assertSelfOrAdmin(id, accountId, accountRole);
     return this.usersService.findOne(id);
   }
 
   @Patch(':id')
   update(
     @Param() { id }: IsValidMongoIdDto,
-    @UserId() userId: string,
+    @AccountId() accountId: string,
+    @AccountRole() accountRole: AuthRole,
     @Body() updateUserDto: UpdateUserDto,
   ) {
-    this.assertSelf(id, userId);
+    this.assertSelf(id, accountId, accountRole);
     return this.usersService.update(id, updateUserDto);
   }
 
   @Delete(':id')
   remove(
     @Param() { id }: IsValidMongoIdDto,
-    @UserId() userId: string,
-    @UserRoleParam() userRole: UserRole,
+    @AccountId() accountId: string,
+    @AccountRole() accountRole: AuthRole,
   ) {
-    this.assertSelfOrAdmin(id, userId, userRole);
+    this.assertSelfOrAdmin(id, accountId, accountRole);
     return this.usersService.remove(id);
   }
 
-  private assertSelf(id: string, userId: string): void {
-    if (userId !== id) throw new ForbiddenException('No permission');
+  private assertSelf(
+    id: string,
+    accountId: string,
+    accountRole: AuthRole,
+  ): void {
+    if (accountRole === AuthRole.COMPANY || accountId !== id) {
+      throw new ForbiddenException('No permission');
+    }
   }
 
   private assertSelfOrAdmin(
     id: string,
-    userId: string,
-    userRole: UserRole,
+    accountId: string,
+    accountRole: AuthRole,
   ): void {
-    if (userRole !== UserRole.ADMIN && userId !== id) {
+    if (accountRole === AuthRole.ADMIN) return;
+    if (accountRole === AuthRole.COMPANY || accountId !== id) {
       throw new ForbiddenException('No permission');
     }
   }

@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { IsAuthGuard } from '../guards/is-auth.guard.js';
-import { UserId } from '../users/decorators/user-id.decorator.js';
+import { AccountId } from '../shared/decorators/account-id.decorator.js';
 import { CreateUserDto } from '../users/dto/create-user.dto.js';
 import { AuthService } from './auth.service.js';
 import { EmailDto } from './dto/email.dto.js';
@@ -51,7 +51,7 @@ export class AuthController {
 
   @Get('me')
   @UseGuards(IsAuthGuard)
-  getCurrentUser(@UserId() userId: string) {
-    return this.authService.getCurrentUser(userId);
+  getCurrentUser(@AccountId() accountId: string) {
+    return this.authService.getCurrentUser(accountId);
   }
 }

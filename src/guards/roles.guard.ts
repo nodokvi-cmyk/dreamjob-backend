@@ -5,9 +5,9 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { ROLES_KEY } from '../shared/decorators/roles.decorator.js';
+import type { AuthRole } from '../shared/types/auth-role.js';
 import type { AuthenticatedRequest } from '../shared/types/authenticated-request.js';
-import { ROLES_KEY } from '../users/decorators/roles.decorator.js';
-import { UserRole } from '../users/schema/user.schema.js';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -15,7 +15,7 @@ export class RolesGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     const requiredRoles = this.reflector.getAllAndOverride<
-      UserRole[] | undefined
+      AuthRole[] | undefined
     >(ROLES_KEY, [context.getHandler(), context.getClass()]);
 
     if (!requiredRoles) {
@@ -24,7 +24,7 @@ export class RolesGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
 
-    if (!request.userRole || !requiredRoles.includes(request.userRole)) {
+    if (!request.accountRole || !requiredRoles.includes(request.accountRole)) {
       throw new ForbiddenException('No Permission');
     }
 

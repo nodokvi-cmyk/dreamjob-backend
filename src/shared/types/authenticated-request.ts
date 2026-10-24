@@ -1,7 +1,7 @@
 import type { Request } from 'express';
-import type { UserRole } from '../../users/schema/user.schema.js';
+import type { AuthRole } from './auth-role.js';
 
 export type AuthenticatedRequest = Request & {
-  userId: string;
-  userRole: UserRole;
+  accountId: string;
+  accountRole: AuthRole;
 };

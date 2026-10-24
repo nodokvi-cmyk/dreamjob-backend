@@ -11,6 +11,7 @@ import { Model, mongo } from 'mongoose';
 import { EmailSenderService } from '../email-sender/email-sender.service.js';
 import { hashOtp, isOtpMatch } from '../shared/crypto/otp-hash.js';
 import { hashPassword, isPasswordMatch } from '../shared/crypto/password.js';
+import { authRoleByUserRole } from '../shared/types/auth-role.js';
 import type { JwtPayload } from '../shared/types/jwt-payload.js';
 import { CreateUserDto } from '../users/dto/create-user.dto.js';
 import { OtpPurpose, User, UserDocument } from '../users/schema/user.schema.js';
@@ -118,8 +119,8 @@ export class AuthService {
     };
   }
 
-  getCurrentUser(userId: string): Promise<UserDocument> {
-    return this.usersService.findOne(userId);
+  getCurrentUser(accountId: string): Promise<UserDocument> {
+    return this.usersService.findOne(accountId);
   }
 
   private isVerificationCodeValid(user: UserDocument, code: string): boolean {
@@ -137,8 +138,8 @@ export class AuthService {
 
   private signToken(user: UserDocument): Promise<string> {
     const payload: JwtPayload = {
-      userId: user._id.toString(),
-      userRole: user.role,
+      accountId: user._id.toString(),
+      accountRole: authRoleByUserRole[user.role],
     };
     return this.jwtService.signAsync(payload);
   }
