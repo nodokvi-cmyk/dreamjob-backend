@@ -7,8 +7,9 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
-import { UsersModule } from './users/users.module.js';
 import { AuthModule } from './auth/auth.module.js';
+import { CompaniesModule } from './companies/companies.module.js';
+import { UsersModule } from './users/users.module.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -38,6 +39,7 @@ const isProduction = process.env.NODE_ENV === 'production';
     }),
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 30 }]),
     UsersModule,
+    CompaniesModule,
     AuthModule,
   ],
   controllers: [AppController],
