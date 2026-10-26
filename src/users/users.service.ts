@@ -1,10 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { hashPassword } from '../shared/crypto/password.js';
+import { hashChangedPassword } from '../shared/crypto/change-password.js';
+import { ChangePasswordDto } from '../shared/dto/change-password.dto.js';
 import { PaginationDto } from '../shared/dto/pagination.dto.js';
+import { OtpPurpose } from '../shared/types/otp-purpose.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
-import { OtpPurpose, User, UserDocument } from './schema/user.schema.js';
+import { User, UserDocument } from './schema/user.schema.js';
 
 @Injectable()
 export class UsersService {
@@ -74,21 +76,77 @@ export class UsersService {
     );
   }
 
+  findForEmailChange(id: string): Promise<UserDocument | null> {
+    return this.userModel
+      .findById(id)
+      .select('+OTPCode +OTPCodeExpirationDate +OTPPurpose +pendingEmail');
+  }
+
+  async startEmailChange(
+    id: string,
+    pendingEmail: string,
+    otpHash: string,
+    expiresAt: Date,
+  ): Promise<void> {
+    await this.userModel.updateOne(
+      { _id: id },
+      {
+        $set: {
+          pendingEmail,
+          OTPCode: otpHash,
+          OTPCodeExpirationDate: expiresAt,
+          OTPPurpose: OtpPurpose.CURRENT_EMAIL_CHANGE,
+        },
+      },
+    );
+  }
+
+  async setEmailChangeCode(
+    id: string,
+    otpHash: string,
+    expiresAt: Date,
+    purpose: OtpPurpose,
+  ): Promise<void> {
+    await this.userModel.updateOne(
+      { _id: id },
+      {
+        $set: {
+          OTPCode: otpHash,
+          OTPCodeExpirationDate: expiresAt,
+          OTPPurpose: purpose,
+        },
+      },
+    );
+  }
+
+  async completeEmailChange(id: string, email: string): Promise<void> {
+    await this.userModel.updateOne(
+      { _id: id },
+      {
+        $set: { email },
+        $unset: {
+          pendingEmail: 1,
+          OTPCode: 1,
+          OTPCodeExpirationDate: 1,
+          OTPPurpose: 1,
+        },
+      },
+    );
+  }
+
   async update(
     id: string,
     updateUserDto: UpdateUserDto,
   ): Promise<UserDocument> {
-    const { firstName, lastName, birthDate, password } = updateUserDto;
+    const { firstName, lastName, birthDate, phone } = updateUserDto;
     const changes: Partial<
-      Pick<User, 'firstName' | 'lastName' | 'birthDate' | 'password'>
+      Pick<User, 'firstName' | 'lastName' | 'birthDate' | 'phone'>
     > = {};
 
     if (firstName) changes.firstName = firstName;
     if (lastName) changes.lastName = lastName;
     if (birthDate) changes.birthDate = birthDate;
-    if (password) {
-      changes.password = await hashPassword(password);
-    }
+    if (typeof phone === 'string') changes.phone = phone;
 
     const user = await this.userModel.findByIdAndUpdate(id, changes, {
       new: true,
@@ -96,6 +154,21 @@ export class UsersService {
     if (!user) throw new NotFoundException('User not found');
 
     return user;
+  }
+
+  async changePassword(
+    id: string,
+    { currentPassword, newPassword }: ChangePasswordDto,
+  ): Promise<void> {
+    const user = await this.userModel.findById(id).select('+password');
+    if (!user) throw new NotFoundException('User not found');
+
+    const password = await hashChangedPassword(
+      user.password,
+      currentPassword,
+      newPassword,
+    );
+    await this.userModel.updateOne({ _id: id }, { $set: { password } });
   }
 
   async remove(id: string): Promise<UserDocument> {

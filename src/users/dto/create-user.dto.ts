@@ -1,18 +1,20 @@
 import { Transform, Type } from 'class-transformer';
 import {
   IsDate,
-  IsEmail,
   IsNotEmpty,
+  IsOptional,
   IsString,
-  Length,
   Matches,
   MaxDate,
   MaxLength,
 } from 'class-validator';
+import { trim } from '../../shared/transforms/string.transforms.js';
+import { AccountEmail } from '../../shared/validation/account-email.js';
 import {
-  trim,
-  trimLowercase,
-} from '../../shared/transforms/string.transforms.js';
+  OPTIONAL_PHONE_PATTERN,
+  PHONE_MESSAGE,
+} from '../../shared/validation/phone.js';
+import { StrongPassword } from '../../shared/validation/strong-password.js';
 
 export class CreateUserDto {
   @Transform(trim)
@@ -27,9 +29,7 @@ export class CreateUserDto {
   @MaxLength(64)
   lastName!: string;
 
-  @Transform(trimLowercase)
-  @IsEmail()
-  @MaxLength(128)
+  @AccountEmail()
   email!: string;
 
   @Type(() => Date)
@@ -37,11 +37,12 @@ export class CreateUserDto {
   @MaxDate(() => new Date())
   birthDate!: Date;
 
+  @IsOptional()
+  @Transform(trim)
   @IsString()
-  @Length(8, 64)
-  @Matches(/^[\x20-\x7E]+$/, {
-    message:
-      'password may contain only English letters, digits, spaces and standard symbols',
-  })
+  @Matches(OPTIONAL_PHONE_PATTERN, { message: PHONE_MESSAGE })
+  phone?: string;
+
+  @StrongPassword()
   password!: string;
 }

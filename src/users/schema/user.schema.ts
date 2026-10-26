@@ -1,15 +1,10 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument } from 'mongoose';
+import { HydratedDocument, Types } from 'mongoose';
+import { OtpPurpose } from '../../shared/types/otp-purpose.js';
 
 export enum UserRole {
   USER = 'user',
   ADMIN = 'admin',
-}
-
-export enum OtpPurpose {
-  EMAIL_VERIFICATION = 'emailVerification',
-  CURRENT_EMAIL_CHANGE = 'currentEmailChange',
-  NEW_EMAIL_CHANGE = 'newEmailChange',
 }
 
 @Schema({
@@ -18,6 +13,9 @@ export enum OtpPurpose {
   toObject: { virtuals: true },
 })
 export class User {
+  @Prop({ type: String, enum: UserRole, default: UserRole.USER })
+  role!: UserRole;
+
   @Prop({ type: String, required: true, trim: true, maxlength: 64 })
   firstName!: string;
 
@@ -37,8 +35,8 @@ export class User {
   })
   email!: string;
 
-  @Prop({ type: String, enum: UserRole, default: UserRole.USER })
-  role!: UserRole;
+  @Prop({ type: String, default: '', trim: true, maxlength: 32 })
+  phone!: string;
 
   @Prop({ type: Boolean, default: false })
   isVerified!: boolean;
@@ -70,6 +68,9 @@ export class User {
 
   @Prop({ type: String, default: '' })
   cvKey!: string;
+
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'Vacancy' }], default: [] })
+  appliedVacancies!: Types.ObjectId[];
 
   declare readonly age: number;
 }
