@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { EmailClaimsService } from '../email-claims/email-claims.service.js';
 import { hashChangedPassword } from '../shared/crypto/change-password.js';
 import { ChangePasswordDto } from '../shared/dto/change-password.dto.js';
 import { PaginationDto } from '../shared/dto/pagination.dto.js';
@@ -12,6 +13,7 @@ import { User, UserDocument } from './schema/user.schema.js';
 export class UsersService {
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<User>,
+    private readonly emailClaims: EmailClaimsService,
   ) {}
 
   async findAll({ page, take }: PaginationDto) {
@@ -174,6 +176,8 @@ export class UsersService {
   async remove(id: string): Promise<UserDocument> {
     const user = await this.userModel.findByIdAndDelete(id);
     if (!user) throw new NotFoundException('User not found');
+
+    await this.emailClaims.releaseAll(id);
 
     return user;
   }
