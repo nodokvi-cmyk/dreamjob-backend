@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, UpdateQuery } from 'mongoose';
+import { EmailClaimsService } from '../email-claims/email-claims.service.js';
 import { hashChangedPassword } from '../shared/crypto/change-password.js';
 import { ChangePasswordDto } from '../shared/dto/change-password.dto.js';
 import { PaginationDto } from '../shared/dto/pagination.dto.js';
@@ -25,6 +26,7 @@ type CompanyChanges = Partial<
 export class CompaniesService {
   constructor(
     @InjectModel(Company.name) private readonly companyModel: Model<Company>,
+    private readonly emailClaims: EmailClaimsService,
   ) {}
 
   async findAll({ page, take }: PaginationDto) {
@@ -213,6 +215,8 @@ export class CompaniesService {
   async remove(id: string): Promise<CompanyDocument> {
     const company = await this.companyModel.findByIdAndDelete(id);
     if (!company) throw new NotFoundException('Company not found');
+
+    await this.emailClaims.releaseAll(id);
 
     return company;
   }
