@@ -8,6 +8,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AuthModule } from './auth/auth.module.js';
+import { EmailChangeModule } from './email-change/email-change.module.js';
 import { CompaniesModule } from './companies/companies.module.js';
 import { UsersModule } from './users/users.module.js';
 
@@ -41,6 +42,7 @@ const isProduction = process.env.NODE_ENV === 'production';
     UsersModule,
     CompaniesModule,
     AuthModule,
+    EmailChangeModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
