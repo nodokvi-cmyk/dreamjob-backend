@@ -95,8 +95,6 @@ export class UsersController {
     accountRole: AuthRole,
   ): void {
     if (accountRole === AuthRole.ADMIN) return;
-    if (accountRole === AuthRole.COMPANY || accountId !== id) {
-      throw new ForbiddenException('No permission');
-    }
+    this.assertSelf(id, accountId, accountRole);
   }
 }
