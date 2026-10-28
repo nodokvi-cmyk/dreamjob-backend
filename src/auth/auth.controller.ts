@@ -8,50 +8,82 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import { CreateCompanyDto } from '../companies/dto/create-company.dto.js';
 import { IsAuthGuard } from '../guards/is-auth.guard.js';
 import { AccountId } from '../shared/decorators/account-id.decorator.js';
+import { AccountRole } from '../shared/decorators/account-role.decorator.js';
+import { strictThrottle } from '../shared/throttle/strict-throttle.js';
+import { AuthRole } from '../shared/types/auth-role.js';
 import { CreateUserDto } from '../users/dto/create-user.dto.js';
 import { AuthService } from './auth.service.js';
 import { EmailDto } from './dto/email.dto.js';
 import { SignInDto } from './dto/sign-in.dto.js';
 import { VerifyEmailDto } from './dto/verify-email.dto.js';
 
-const strictThrottle = { default: { limit: 5, ttl: 60_000 } };
-
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @Post('sign-up')
+  @Post('users/sign-up')
   @Throttle(strictThrottle)
-  signUp(@Body() createUserDto: CreateUserDto) {
-    return this.authService.signUp(createUserDto);
+  signUpUser(@Body() createUserDto: CreateUserDto) {
+    return this.authService.signUpUser(createUserDto);
   }
 
-  @Post('verify-email')
+  @Post('users/verify-email')
   @HttpCode(HttpStatus.OK)
   @Throttle(strictThrottle)
-  verifyEmail(@Body() verifyEmailDto: VerifyEmailDto) {
-    return this.authService.verifyEmail(verifyEmailDto);
+  verifyUserEmail(@Body() verifyEmailDto: VerifyEmailDto) {
+    return this.authService.verifyUserEmail(verifyEmailDto);
   }
 
-  @Post('sign-in')
+  @Post('users/sign-in')
   @HttpCode(HttpStatus.OK)
   @Throttle(strictThrottle)
-  signIn(@Body() signInDto: SignInDto) {
-    return this.authService.signIn(signInDto);
+  signInUser(@Body() signInDto: SignInDto) {
+    return this.authService.signInUser(signInDto);
   }
 
-  @Post('resend-code')
+  @Post('users/resend-code')
   @HttpCode(HttpStatus.OK)
   @Throttle(strictThrottle)
-  resendVerificationCode(@Body() emailDto: EmailDto) {
-    return this.authService.resendVerificationCode(emailDto);
+  resendUserCode(@Body() emailDto: EmailDto) {
+    return this.authService.resendUserCode(emailDto);
+  }
+
+  @Post('companies/sign-up')
+  @Throttle(strictThrottle)
+  signUpCompany(@Body() createCompanyDto: CreateCompanyDto) {
+    return this.authService.signUpCompany(createCompanyDto);
+  }
+
+  @Post('companies/verify-email')
+  @HttpCode(HttpStatus.OK)
+  @Throttle(strictThrottle)
+  verifyCompanyEmail(@Body() verifyEmailDto: VerifyEmailDto) {
+    return this.authService.verifyCompanyEmail(verifyEmailDto);
+  }
+
+  @Post('companies/sign-in')
+  @HttpCode(HttpStatus.OK)
+  @Throttle(strictThrottle)
+  signInCompany(@Body() signInDto: SignInDto) {
+    return this.authService.signInCompany(signInDto);
+  }
+
+  @Post('companies/resend-code')
+  @HttpCode(HttpStatus.OK)
+  @Throttle(strictThrottle)
+  resendCompanyCode(@Body() emailDto: EmailDto) {
+    return this.authService.resendCompanyCode(emailDto);
   }
 
   @Get('me')
   @UseGuards(IsAuthGuard)
-  getCurrentUser(@AccountId() accountId: string) {
-    return this.authService.getCurrentUser(accountId);
+  getCurrentAccount(
+    @AccountId() accountId: string,
+    @AccountRole() accountRole: AuthRole,
+  ) {
+    return this.authService.getCurrentAccount(accountId, accountRole);
   }
 }
