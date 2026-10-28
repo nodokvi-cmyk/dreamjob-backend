@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, UpdateQuery } from 'mongoose';
 import { EmailClaimsService } from '../email-claims/email-claims.service.js';
@@ -51,6 +55,29 @@ export class CompaniesService {
 
   findByEmail(email: string): Promise<CompanyDocument | null> {
     return this.companyModel.findOne({ email });
+  }
+
+  findByGoogleId(googleId: string): Promise<CompanyDocument | null> {
+    return this.companyModel.findOne({ googleId });
+  }
+
+  async linkGoogleAccount(
+    company: CompanyDocument,
+    googleId: string,
+  ): Promise<void> {
+    const update: UpdateQuery<Company> = company.isVerified
+      ? { $set: { googleId } }
+      : {
+          $set: { googleId, isVerified: true },
+          $unset: {
+            password: 1,
+            OTPCode: 1,
+            OTPCodeExpirationDate: 1,
+            OTPPurpose: 1,
+          },
+        };
+
+    await this.companyModel.updateOne({ _id: company._id }, update);
   }
 
   findByEmailWithPassword(email: string): Promise<CompanyDocument | null> {
@@ -202,6 +229,13 @@ export class CompaniesService {
   }
 
   async approve(id: string): Promise<CompanyDocument> {
+    const existing = await this.findOne(id);
+    if (!existing.isProfileComplete) {
+      throw new BadRequestException(
+        'Company profile is incomplete: companyName and description are required',
+      );
+    }
+
     const company = await this.companyModel.findByIdAndUpdate(
       id,
       { approved: true },

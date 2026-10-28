@@ -13,9 +13,13 @@ export class Director {
 
 export const directorSchema = SchemaFactory.createForClass(Director);
 
-@Schema({ timestamps: true })
+@Schema({
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true },
+})
 export class Company {
-  @Prop({ type: String, required: true, trim: true, maxlength: 128 })
+  @Prop({ type: String, default: '', trim: true, maxlength: 128 })
   companyName!: string;
 
   @Prop({
@@ -27,6 +31,9 @@ export class Company {
     maxlength: 128,
   })
   email!: string;
+
+  @Prop({ type: String, required: false, unique: true, sparse: true })
+  googleId?: string;
 
   @Prop({ type: directorSchema, required: false })
   director?: Director;
@@ -65,7 +72,7 @@ export class Company {
   @Prop({ type: String, default: '', trim: true, maxlength: 128 })
   location!: string;
 
-  @Prop({ type: String, required: true, trim: true, maxlength: 2000 })
+  @Prop({ type: String, default: '', trim: true, maxlength: 2000 })
   description!: string;
 
   @Prop({ type: String, default: '', trim: true, maxlength: 256 })
@@ -79,8 +86,16 @@ export class Company {
 
   @Prop({ type: [{ type: Types.ObjectId, ref: 'Vacancy' }], default: [] })
   publishedVacancies!: Types.ObjectId[];
+
+  declare readonly isProfileComplete: boolean;
 }
 
 export type CompanyDocument = HydratedDocument<Company>;
 
 export const companySchema = SchemaFactory.createForClass(Company);
+
+companySchema.virtual('isProfileComplete').get(function (
+  this: CompanyDocument,
+): boolean {
+  return this.companyName !== '' && this.description !== '';
+});
