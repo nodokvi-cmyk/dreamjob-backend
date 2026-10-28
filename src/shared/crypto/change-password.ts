@@ -3,10 +3,15 @@ import { hashPassword, isPasswordMatch } from './password.js';
 
 export const hashChangedPassword = async (
   storedHash: string | undefined,
-  currentPassword: string,
+  currentPassword: string | undefined,
   newPassword: string,
 ): Promise<string> => {
-  if (!storedHash || !(await isPasswordMatch(currentPassword, storedHash))) {
+  if (!storedHash) return hashPassword(newPassword);
+
+  if (
+    !currentPassword ||
+    !(await isPasswordMatch(currentPassword, storedHash))
+  ) {
     throw new BadRequestException('Current password is incorrect');
   }
 
