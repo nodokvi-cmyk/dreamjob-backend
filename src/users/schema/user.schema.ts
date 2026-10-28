@@ -19,11 +19,14 @@ export class User {
   @Prop({ type: String, required: true, trim: true, maxlength: 64 })
   firstName!: string;
 
-  @Prop({ type: String, required: true, trim: true, maxlength: 64 })
+  @Prop({ type: String, default: '', trim: true, maxlength: 64 })
   lastName!: string;
 
-  @Prop({ type: Date, required: true })
-  birthDate!: Date;
+  @Prop({ type: Date, required: false })
+  birthDate?: Date;
+
+  @Prop({ type: String, required: false, unique: true, sparse: true })
+  googleId?: string;
 
   @Prop({
     type: String,
@@ -72,16 +75,19 @@ export class User {
   @Prop({ type: [{ type: Types.ObjectId, ref: 'Vacancy' }], default: [] })
   appliedVacancies!: Types.ObjectId[];
 
-  declare readonly age: number;
+  declare readonly age: number | undefined;
 }
 
 export type UserDocument = HydratedDocument<User>;
 
 export const userSchema = SchemaFactory.createForClass(User);
 
-userSchema.virtual('age').get(function (this: UserDocument): number {
+userSchema.virtual('age').get(function (
+  this: UserDocument,
+): number | undefined {
   const today = new Date();
   const birth = this.birthDate;
+  if (!birth) return undefined;
   const hadBirthday =
     today.getUTCMonth() > birth.getUTCMonth() ||
     (today.getUTCMonth() === birth.getUTCMonth() &&

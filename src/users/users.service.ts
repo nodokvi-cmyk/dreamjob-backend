@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, UpdateQuery } from 'mongoose';
 import { EmailClaimsService } from '../email-claims/email-claims.service.js';
 import { hashChangedPassword } from '../shared/crypto/change-password.js';
 import { ChangePasswordDto } from '../shared/dto/change-password.dto.js';
@@ -38,6 +38,26 @@ export class UsersService {
 
   findByEmail(email: string): Promise<UserDocument | null> {
     return this.userModel.findOne({ email });
+  }
+
+  findByGoogleId(googleId: string): Promise<UserDocument | null> {
+    return this.userModel.findOne({ googleId });
+  }
+
+  async linkGoogleAccount(user: UserDocument, googleId: string): Promise<void> {
+    const update: UpdateQuery<User> = user.isVerified
+      ? { $set: { googleId } }
+      : {
+          $set: { googleId, isVerified: true },
+          $unset: {
+            password: 1,
+            OTPCode: 1,
+            OTPCodeExpirationDate: 1,
+            OTPPurpose: 1,
+          },
+        };
+
+    await this.userModel.updateOne({ _id: user._id }, update);
   }
 
   findByEmailWithPassword(email: string): Promise<UserDocument | null> {
