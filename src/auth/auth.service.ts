@@ -1,6 +1,5 @@
 import {
   ConflictException,
-  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -16,8 +15,16 @@ import {
 } from '../companies/schema/company.schema.js';
 import { EmailClaimsService } from '../email-claims/email-claims.service.js';
 import { EmailSenderService } from '../email-sender/email-sender.service.js';
-import { hashOtp, isOtpValid } from '../shared/crypto/otp-hash.js';
+import {
+  hashOtp,
+  isOtpValid,
+  type OtpHolder,
+} from '../shared/crypto/otp-hash.js';
 import { hashPassword, isPasswordMatch } from '../shared/crypto/password.js';
+import {
+  emailNotVerifiedSignInError,
+  emailNotVerifiedSignUpError,
+} from '../shared/errors/email-not-verified.js';
 import { withEmailConflict } from '../shared/mongo/with-email-conflict.js';
 import { AuthRole, authRoleByUserRole } from '../shared/types/auth-role.js';
 import type { JwtPayload } from '../shared/types/jwt-payload.js';
@@ -31,12 +38,23 @@ import {
   GoogleIdentity,
   GoogleTokenVerifier,
 } from './google-token-verifier.service.js';
+import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { SignInDto } from './dto/sign-in.dto.js';
 import { VerifyEmailDto } from './dto/verify-email.dto.js';
 
 const SIGN_UP_MESSAGE = 'Verification code sent to your email';
 const RESEND_MESSAGE =
   'If the account exists and is not verified, a new code was sent to its email';
+
+const FORGOT_PASSWORD_MESSAGE =
+  'If the account exists, a password reset code was sent to its email';
+const RESET_PASSWORD_MESSAGE = 'Password was reset, you can sign in now';
+
+type SaveCode = (
+  otpHash: string,
+  expiresAt: Date,
+  purpose: OtpPurpose,
+) => Promise<void>;
 
 type VerifiableAccount = Pick<
   User,
@@ -67,16 +85,20 @@ export class AuthService {
   signUpUser(createUserDto: CreateUserDto): Promise<{ message: string }> {
     const { firstName, lastName, email, birthDate, phone } = createUserDto;
 
-    return this.signUp(email, createUserDto.password, (_id, credentials) =>
-      this.userModel.create({
-        _id,
-        firstName,
-        lastName,
-        email,
-        birthDate,
-        phone,
-        ...credentials,
-      }),
+    return this.signUp(
+      email,
+      createUserDto.password,
+      (address) => this.usersService.findByEmail(address),
+      (_id, credentials) =>
+        this.userModel.create({
+          _id,
+          firstName,
+          lastName,
+          email,
+          birthDate,
+          phone,
+          ...credentials,
+        }),
     );
   }
 
@@ -94,19 +116,23 @@ export class AuthService {
       director,
     } = createCompanyDto;
 
-    return this.signUp(email, createCompanyDto.password, (_id, credentials) =>
-      this.companyModel.create({
-        _id,
-        companyName,
-        email,
-        phone,
-        location,
-        description,
-        website,
-        operatingCities,
-        director: director ?? undefined,
-        ...credentials,
-      }),
+    return this.signUp(
+      email,
+      createCompanyDto.password,
+      (address) => this.companiesService.findByEmail(address),
+      (_id, credentials) =>
+        this.companyModel.create({
+          _id,
+          companyName,
+          email,
+          phone,
+          location,
+          description,
+          website,
+          operatingCities,
+          director: director ?? undefined,
+          ...credentials,
+        }),
     );
   }
 
@@ -216,6 +242,64 @@ export class AuthService {
     return { message: RESEND_MESSAGE };
   }
 
+  async forgotUserPassword({ email }: EmailDto): Promise<{ message: string }> {
+    if (await this.usersService.findByEmail(email)) {
+      await this.issuePasswordResetCode(email, (otpHash, expiresAt, purpose) =>
+        this.usersService.setVerificationCode(
+          email,
+          otpHash,
+          expiresAt,
+          purpose,
+        ),
+      );
+    }
+
+    return { message: FORGOT_PASSWORD_MESSAGE };
+  }
+
+  async forgotCompanyPassword({
+    email,
+  }: EmailDto): Promise<{ message: string }> {
+    if (await this.companiesService.findByEmail(email)) {
+      await this.issuePasswordResetCode(email, (otpHash, expiresAt, purpose) =>
+        this.companiesService.setVerificationCode(
+          email,
+          otpHash,
+          expiresAt,
+          purpose,
+        ),
+      );
+    }
+
+    return { message: FORGOT_PASSWORD_MESSAGE };
+  }
+
+  async resetUserPassword(
+    resetPasswordDto: ResetPasswordDto,
+  ): Promise<{ message: string }> {
+    const { email } = resetPasswordDto;
+    const passwordHash = await this.hashResetPassword(
+      await this.usersService.findByEmailWithVerificationCode(email),
+      resetPasswordDto,
+    );
+    await this.usersService.resetPassword(email, passwordHash);
+
+    return { message: RESET_PASSWORD_MESSAGE };
+  }
+
+  async resetCompanyPassword(
+    resetPasswordDto: ResetPasswordDto,
+  ): Promise<{ message: string }> {
+    const { email } = resetPasswordDto;
+    const passwordHash = await this.hashResetPassword(
+      await this.companiesService.findByEmailWithVerificationCode(email),
+      resetPasswordDto,
+    );
+    await this.companiesService.resetPassword(email, passwordHash);
+
+    return { message: RESET_PASSWORD_MESSAGE };
+  }
+
   async getCurrentAccount(accountId: string, accountRole: AuthRole) {
     return accountRole === AuthRole.COMPANY
       ? this.companiesService.toResponse(
@@ -229,11 +313,19 @@ export class AuthService {
   private async signUp(
     email: string,
     plainPassword: string,
+    findSameTypeAccount: (
+      email: string,
+    ) => Promise<Pick<User, 'isVerified'> | null>,
     create: (
       accountId: Types.ObjectId,
       credentials: SignUpCredentials,
     ) => Promise<unknown>,
   ): Promise<{ message: string }> {
+    const existing = await findSameTypeAccount(email);
+    if (existing && !existing.isVerified) {
+      throw emailNotVerifiedSignUpError();
+    }
+
     const accountId = new Types.ObjectId();
     await this.emailClaims.claim(email, accountId);
 
@@ -361,21 +453,47 @@ export class AuthService {
     };
   }
 
-  private async issueVerificationCode(
+  private issueVerificationCode(email: string, save: SaveCode): Promise<void> {
+    return this.issueCode(
+      email,
+      OtpPurpose.EMAIL_VERIFICATION,
+      (code) => this.emailSender.sendVerificationCode(email, code),
+      save,
+    );
+  }
+
+  private issuePasswordResetCode(email: string, save: SaveCode): Promise<void> {
+    return this.issueCode(
+      email,
+      OtpPurpose.PASSWORD_RESET,
+      (code) => this.emailSender.sendPasswordResetCode(email, code),
+      save,
+    );
+  }
+
+  private async issueCode(
     email: string,
-    save: (
-      otpHash: string,
-      expiresAt: Date,
-      purpose: OtpPurpose,
-    ) => Promise<void>,
+    purpose: OtpPurpose,
+    send: (code: string) => Promise<void>,
+    save: SaveCode,
   ): Promise<void> {
     const { code, expiresAt } = this.emailSender.createVerificationCode();
-    await save(
-      hashOtp(code, this.otpSecret()),
-      expiresAt,
-      OtpPurpose.EMAIL_VERIFICATION,
-    );
-    await this.emailSender.sendVerificationCode(email, code);
+    await save(hashOtp(code, this.otpSecret()), expiresAt, purpose);
+    await send(code);
+  }
+
+  private async hashResetPassword(
+    account: OtpHolder | null,
+    { code, newPassword }: ResetPasswordDto,
+  ): Promise<string> {
+    if (
+      !account ||
+      !isOtpValid(account, code, OtpPurpose.PASSWORD_RESET, this.otpSecret())
+    ) {
+      throw new UnauthorizedException('Invalid or expired code');
+    }
+
+    return hashPassword(newPassword);
   }
 
   private async verifyCredentials<T extends SignableAccount>(
@@ -391,9 +509,7 @@ export class AuthService {
     }
 
     if (!account.isVerified) {
-      throw new ForbiddenException(
-        'Please verify your email before signing in',
-      );
+      throw emailNotVerifiedSignInError();
     }
 
     return account;

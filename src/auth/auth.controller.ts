@@ -18,6 +18,7 @@ import { CreateUserDto } from '../users/dto/create-user.dto.js';
 import { AuthService } from './auth.service.js';
 import { EmailDto } from './dto/email.dto.js';
 import { GoogleSignInDto } from './dto/google-sign-in.dto.js';
+import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { SignInDto } from './dto/sign-in.dto.js';
 import { VerifyEmailDto } from './dto/verify-email.dto.js';
 
@@ -91,6 +92,34 @@ export class AuthController {
   @Throttle(strictThrottle)
   resendCompanyCode(@Body() emailDto: EmailDto) {
     return this.authService.resendCompanyCode(emailDto);
+  }
+
+  @Post('users/forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @Throttle(strictThrottle)
+  forgotUserPassword(@Body() emailDto: EmailDto) {
+    return this.authService.forgotUserPassword(emailDto);
+  }
+
+  @Post('users/reset-password')
+  @HttpCode(HttpStatus.OK)
+  @Throttle(strictThrottle)
+  resetUserPassword(@Body() resetPasswordDto: ResetPasswordDto) {
+    return this.authService.resetUserPassword(resetPasswordDto);
+  }
+
+  @Post('companies/forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @Throttle(strictThrottle)
+  forgotCompanyPassword(@Body() emailDto: EmailDto) {
+    return this.authService.forgotCompanyPassword(emailDto);
+  }
+
+  @Post('companies/reset-password')
+  @HttpCode(HttpStatus.OK)
+  @Throttle(strictThrottle)
+  resetCompanyPassword(@Body() resetPasswordDto: ResetPasswordDto) {
+    return this.authService.resetCompanyPassword(resetPasswordDto);
   }
 
   @Get('me')
