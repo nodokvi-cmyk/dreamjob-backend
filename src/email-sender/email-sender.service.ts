@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { randomInt } from 'node:crypto';
 import { renderOtpEmail } from '../email/templates/otp-email.js';
+import type { OtpEmailVariant } from '../email/templates/otp-email.js';
 import { MAIL_TRANSPORT } from './mail-transport.provider.js';
 import type { MailTransport } from './mail-transport.provider.js';
 
@@ -28,10 +29,23 @@ export class EmailSenderService {
     };
   }
 
-  async sendVerificationCode(to: string, code: string): Promise<void> {
+  sendVerificationCode(to: string, code: string): Promise<void> {
+    return this.sendCode(to, code, 'verification');
+  }
+
+  sendPasswordResetCode(to: string, code: string): Promise<void> {
+    return this.sendCode(to, code, 'passwordReset');
+  }
+
+  private async sendCode(
+    to: string,
+    code: string,
+    variant: OtpEmailVariant,
+  ): Promise<void> {
     const { subject, html, text } = await renderOtpEmail({
       code,
       expiresInMinutes: OTP_EXPIRATION_MINUTES,
+      variant,
     });
 
     try {
