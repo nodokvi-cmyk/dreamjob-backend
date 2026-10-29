@@ -10,16 +10,40 @@ import {
 } from '@react-email/components';
 import { render } from '@react-email/render';
 
+export type OtpEmailVariant = 'verification' | 'passwordReset';
+
 export interface OtpEmailProps {
   code: string;
   expiresInMinutes: number;
+  variant?: OtpEmailVariant;
 }
 
-export function OtpEmail({ code, expiresInMinutes }: OtpEmailProps) {
+const copyByVariant = {
+  verification: {
+    subject: 'Your DreamJob verification code',
+    heading: 'Verify your email',
+    intro: 'Use this code to finish signing up.',
+  },
+  passwordReset: {
+    subject: 'Your DreamJob password reset code',
+    heading: 'Reset your password',
+    intro: 'Use this code to reset your password.',
+  },
+} satisfies Record<
+  OtpEmailVariant,
+  { subject: string; heading: string; intro: string }
+>;
+
+export function OtpEmail({
+  code,
+  expiresInMinutes,
+  variant = 'verification',
+}: OtpEmailProps) {
+  const { subject, heading, intro } = copyByVariant[variant];
   return (
     <Html lang="en">
       <Head />
-      <Preview>Your DreamJob verification code is {code}</Preview>
+      <Preview>{`${subject} is ${code}`}</Preview>
       <Body
         style={{ backgroundColor: '#f4f4f5', fontFamily: 'Arial, sans-serif' }}
       >
@@ -33,10 +57,10 @@ export function OtpEmail({ code, expiresInMinutes }: OtpEmailProps) {
           }}
         >
           <Heading as="h1" style={{ fontSize: 22, margin: '0 0 16px' }}>
-            Verify your email
+            {heading}
           </Heading>
           <Text style={{ fontSize: 15, color: '#3f3f46' }}>
-            {`Use this code to finish signing up. It expires in ${expiresInMinutes} minutes.`}
+            {`${intro} It expires in ${expiresInMinutes} minutes.`}
           </Text>
           <Section style={{ textAlign: 'center', margin: '24px 0' }}>
             <Text
@@ -68,5 +92,9 @@ export async function renderOtpEmail(props: OtpEmailProps) {
     render(element),
     render(element, { plainText: true }),
   ]);
-  return { subject: 'Your DreamJob verification code', html, text };
+  return {
+    subject: copyByVariant[props.variant ?? 'verification'].subject,
+    html,
+    text,
+  };
 }
