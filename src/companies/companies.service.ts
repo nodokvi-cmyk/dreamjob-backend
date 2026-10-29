@@ -161,6 +161,16 @@ export class CompaniesService {
     );
   }
 
+  async resetPassword(email: string, passwordHash: string): Promise<void> {
+    await this.companyModel.updateOne(
+      { email },
+      {
+        $set: { password: passwordHash },
+        $unset: { OTPCode: 1, OTPCodeExpirationDate: 1, OTPPurpose: 1 },
+      },
+    );
+  }
+
   async markEmailVerified(email: string): Promise<void> {
     await this.companyModel.updateOne(
       { email },
