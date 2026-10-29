@@ -72,6 +72,9 @@ export class User {
   @Prop({ type: String, default: '' })
   cvKey!: string;
 
+  @Prop({ type: Boolean, default: false })
+  isCvPublic!: boolean;
+
   @Prop({ type: [{ type: Types.ObjectId, ref: 'Vacancy' }], default: [] })
   appliedVacancies!: Types.ObjectId[];
 

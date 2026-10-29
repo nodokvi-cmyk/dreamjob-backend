@@ -1,10 +1,24 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, UpdateQuery } from 'mongoose';
+import { assertPdf, PDF_CONTENT_TYPE } from '../aws-s3/assert-pdf.js';
+import { AwsS3Service } from '../aws-s3/aws-s3.service.js';
+import {
+  ImageKind,
+  PROCESSED_IMAGE_CONTENT_TYPE,
+  processImage,
+} from '../aws-s3/process-image.js';
+import { StoragePrefix } from '../aws-s3/storage-prefix.js';
+import { CompaniesService } from '../companies/companies.service.js';
 import { EmailClaimsService } from '../email-claims/email-claims.service.js';
 import { hashChangedPassword } from '../shared/crypto/change-password.js';
 import { ChangePasswordDto } from '../shared/dto/change-password.dto.js';
 import { PaginationDto } from '../shared/dto/pagination.dto.js';
+import { AuthRole } from '../shared/types/auth-role.js';
 import { OtpPurpose } from '../shared/types/otp-purpose.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { User, UserDocument } from './schema/user.schema.js';
@@ -14,7 +28,127 @@ export class UsersService {
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<User>,
     private readonly emailClaims: EmailClaimsService,
+    private readonly s3: AwsS3Service,
+    private readonly companiesService: CompaniesService,
   ) {}
+
+  toResponse(user: UserDocument) {
+    const { avatarKey, cvKey, ...rest } = user.toJSON();
+
+    return {
+      ...rest,
+      avatarUrl: this.s3.publicUrl(avatarKey),
+      hasCv: cvKey !== '',
+    };
+  }
+
+  async setAvatar(id: string, file: Express.Multer.File) {
+    const user = await this.findOne(id);
+    const body = await processImage(file.buffer, ImageKind.AVATAR);
+    const key = this.s3.newKey(StoragePrefix.AVATARS);
+
+    await this.s3.upload(key, body, PROCESSED_IMAGE_CONTENT_TYPE);
+    const updated = await this.userModel.findByIdAndUpdate(
+      id,
+      { $set: { avatarKey: key } },
+      { new: true },
+    );
+    if (!updated) {
+      await this.s3.deleteQuietly(key);
+      throw new NotFoundException('User not found');
+    }
+
+    await this.s3.deleteQuietly(user.avatarKey);
+
+    return this.toResponse(updated);
+  }
+
+  async removeAvatar(id: string) {
+    const user = await this.findOne(id);
+    if (!user.avatarKey) throw new NotFoundException('Avatar not found');
+
+    const updated = await this.userModel.findByIdAndUpdate(
+      id,
+      { $set: { avatarKey: '' } },
+      { new: true },
+    );
+    if (!updated) throw new NotFoundException('User not found');
+
+    await this.s3.deleteQuietly(user.avatarKey);
+
+    return this.toResponse(updated);
+  }
+
+  async setCv(id: string, file: Express.Multer.File) {
+    assertPdf(file.buffer);
+    const user = await this.findOne(id);
+    const key = this.s3.newKey(StoragePrefix.CVS);
+
+    await this.s3.upload(key, file.buffer, PDF_CONTENT_TYPE);
+    const updated = await this.userModel.findByIdAndUpdate(
+      id,
+      { $set: { cvKey: key } },
+      { new: true },
+    );
+    if (!updated) {
+      await this.s3.deleteQuietly(key);
+      throw new NotFoundException('User not found');
+    }
+
+    await this.s3.deleteQuietly(user.cvKey);
+
+    return this.toResponse(updated);
+  }
+
+  async removeCv(id: string) {
+    const user = await this.findOne(id);
+    if (!user.cvKey) throw new NotFoundException('CV not found');
+
+    const updated = await this.userModel.findByIdAndUpdate(
+      id,
+      { $set: { cvKey: '', isCvPublic: false } },
+      { new: true },
+    );
+    if (!updated) throw new NotFoundException('User not found');
+
+    await this.s3.deleteQuietly(user.cvKey);
+
+    return this.toResponse(updated);
+  }
+
+  async setCvVisibility(id: string, isCvPublic: boolean) {
+    const updated = await this.userModel.findByIdAndUpdate(
+      id,
+      { $set: { isCvPublic } },
+      { new: true },
+    );
+    if (!updated) throw new NotFoundException('User not found');
+
+    return this.toResponse(updated);
+  }
+
+  async getCvUrl(id: string, accountId: string, accountRole: AuthRole) {
+    const user = await this.findOne(id);
+    await this.assertCanViewCv(user, accountId, accountRole);
+    if (!user.cvKey) throw new NotFoundException('CV not found');
+
+    return this.s3.presignedUrl(user.cvKey);
+  }
+
+  private async assertCanViewCv(
+    user: UserDocument,
+    accountId: string,
+    accountRole: AuthRole,
+  ): Promise<void> {
+    if (accountRole === AuthRole.USER && accountId === user.id) return;
+
+    if (accountRole === AuthRole.COMPANY && user.isCvPublic) {
+      const company = await this.companiesService.findOne(accountId);
+      if (company.approved) return;
+    }
+
+    throw new ForbiddenException('No permission');
+  }
 
   async findAll({ page, take }: PaginationDto) {
     const [items, total] = await Promise.all([
@@ -198,6 +332,10 @@ export class UsersService {
     if (!user) throw new NotFoundException('User not found');
 
     await this.emailClaims.releaseAll(id);
+    await Promise.all([
+      this.s3.deleteQuietly(user.avatarKey),
+      this.s3.deleteQuietly(user.cvKey),
+    ]);
 
     return user;
   }
