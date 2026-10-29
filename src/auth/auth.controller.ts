@@ -17,6 +17,7 @@ import { AuthRole } from '../shared/types/auth-role.js';
 import { CreateUserDto } from '../users/dto/create-user.dto.js';
 import { AuthService } from './auth.service.js';
 import { EmailDto } from './dto/email.dto.js';
+import { GoogleSignInDto } from './dto/google-sign-in.dto.js';
 import { SignInDto } from './dto/sign-in.dto.js';
 import { VerifyEmailDto } from './dto/verify-email.dto.js';
 
@@ -49,6 +50,20 @@ export class AuthController {
   @Throttle(strictThrottle)
   resendUserCode(@Body() emailDto: EmailDto) {
     return this.authService.resendUserCode(emailDto);
+  }
+
+  @Post('users/google')
+  @HttpCode(HttpStatus.OK)
+  @Throttle(strictThrottle)
+  signInUserWithGoogle(@Body() googleSignInDto: GoogleSignInDto) {
+    return this.authService.signInUserWithGoogle(googleSignInDto);
+  }
+
+  @Post('companies/google')
+  @HttpCode(HttpStatus.OK)
+  @Throttle(strictThrottle)
+  signInCompanyWithGoogle(@Body() googleSignInDto: GoogleSignInDto) {
+    return this.authService.signInCompanyWithGoogle(googleSignInDto);
   }
 
   @Post('companies/sign-up')

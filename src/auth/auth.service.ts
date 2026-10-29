@@ -26,6 +26,11 @@ import { CreateUserDto } from '../users/dto/create-user.dto.js';
 import { User, UserDocument } from '../users/schema/user.schema.js';
 import { UsersService } from '../users/users.service.js';
 import { EmailDto } from './dto/email.dto.js';
+import { GoogleSignInDto } from './dto/google-sign-in.dto.js';
+import {
+  GoogleIdentity,
+  GoogleTokenVerifier,
+} from './google-token-verifier.service.js';
 import { SignInDto } from './dto/sign-in.dto.js';
 import { VerifyEmailDto } from './dto/verify-email.dto.js';
 
@@ -54,6 +59,7 @@ export class AuthService {
     private readonly companiesService: CompaniesService,
     private readonly emailClaims: EmailClaimsService,
     private readonly emailSender: EmailSenderService,
+    private readonly googleTokenVerifier: GoogleTokenVerifier,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
   ) {}
@@ -102,6 +108,28 @@ export class AuthService {
         ...credentials,
       }),
     );
+  }
+
+  async signInUserWithGoogle({
+    idToken,
+  }: GoogleSignInDto): Promise<{ token: string }> {
+    const identity = await this.googleTokenVerifier.verify(idToken);
+    const user =
+      (await this.usersService.findByGoogleId(identity.googleId)) ??
+      (await this.linkOrCreateGoogleUser(identity));
+
+    return { token: await this.signUserToken(user) };
+  }
+
+  async signInCompanyWithGoogle({
+    idToken,
+  }: GoogleSignInDto): Promise<{ token: string }> {
+    const identity = await this.googleTokenVerifier.verify(idToken);
+    const company =
+      (await this.companiesService.findByGoogleId(identity.googleId)) ??
+      (await this.linkOrCreateGoogleCompany(identity));
+
+    return { token: await this.signCompanyToken(company) };
   }
 
   async verifyUserEmail({
@@ -219,6 +247,90 @@ export class AuthService {
     await this.emailClaims.confirm(email, accountId);
 
     return { message: SIGN_UP_MESSAGE };
+  }
+
+  private async linkOrCreateGoogleUser(
+    identity: GoogleIdentity,
+  ): Promise<UserDocument> {
+    const existing = await this.usersService.findByEmail(identity.email);
+    if (!existing) return this.createGoogleUser(identity);
+
+    if (existing.googleId) {
+      throw new UnauthorizedException('Google sign-in failed');
+    }
+
+    await this.usersService.linkGoogleAccount(existing, identity.googleId);
+
+    return existing;
+  }
+
+  private async createGoogleUser({
+    googleId,
+    email,
+    firstName,
+    lastName,
+  }: GoogleIdentity): Promise<UserDocument> {
+    const accountId = new Types.ObjectId();
+    await this.emailClaims.claim(email, accountId);
+
+    let user: UserDocument;
+    try {
+      await this.assertNoAccountWithEmail(email);
+      user = await this.userModel.create({
+        _id: accountId,
+        firstName,
+        lastName,
+        email,
+        googleId,
+        isVerified: true,
+      });
+    } catch (error: unknown) {
+      await this.emailClaims.release(email, accountId);
+      throw error;
+    }
+    await this.emailClaims.confirm(email, accountId);
+
+    return user;
+  }
+
+  private async linkOrCreateGoogleCompany(
+    identity: GoogleIdentity,
+  ): Promise<CompanyDocument> {
+    const existing = await this.companiesService.findByEmail(identity.email);
+    if (!existing) return this.createGoogleCompany(identity);
+
+    if (existing.googleId) {
+      throw new UnauthorizedException('Google sign-in failed');
+    }
+
+    await this.companiesService.linkGoogleAccount(existing, identity.googleId);
+
+    return existing;
+  }
+
+  private async createGoogleCompany({
+    googleId,
+    email,
+  }: GoogleIdentity): Promise<CompanyDocument> {
+    const accountId = new Types.ObjectId();
+    await this.emailClaims.claim(email, accountId);
+
+    let company: CompanyDocument;
+    try {
+      await this.assertNoAccountWithEmail(email);
+      company = await this.companyModel.create({
+        _id: accountId,
+        email,
+        googleId,
+        isVerified: true,
+      });
+    } catch (error: unknown) {
+      await this.emailClaims.release(email, accountId);
+      throw error;
+    }
+    await this.emailClaims.confirm(email, accountId);
+
+    return company;
   }
 
   private async assertNoAccountWithEmail(email: string): Promise<void> {
