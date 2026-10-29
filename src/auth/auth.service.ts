@@ -216,13 +216,14 @@ export class AuthService {
     return { message: RESEND_MESSAGE };
   }
 
-  getCurrentAccount(
-    accountId: string,
-    accountRole: AuthRole,
-  ): Promise<UserDocument | CompanyDocument> {
+  async getCurrentAccount(accountId: string, accountRole: AuthRole) {
     return accountRole === AuthRole.COMPANY
-      ? this.companiesService.findOne(accountId)
-      : this.usersService.findOne(accountId);
+      ? this.companiesService.toResponse(
+          await this.companiesService.findOne(accountId),
+        )
+      : this.usersService.toResponse(
+          await this.usersService.findOne(accountId),
+        );
   }
 
   private async signUp(
