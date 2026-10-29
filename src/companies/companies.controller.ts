@@ -7,9 +7,13 @@ import {
   Param,
   Patch,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
+import { uploadFilePipe, uploadLimits } from '../aws-s3/upload-file.js';
 import { IsAuthGuard } from '../guards/is-auth.guard.js';
 import { RolesGuard } from '../guards/roles.guard.js';
 import { AccountId } from '../shared/decorators/account-id.decorator.js';
@@ -30,35 +34,70 @@ export class CompaniesController {
 
   @Get()
   @Roles(AuthRole.ADMIN)
-  findAll(@Query() paginationDto: PaginationDto) {
-    return this.companiesService.findAll(paginationDto);
+  async findAll(@Query() paginationDto: PaginationDto) {
+    const result = await this.companiesService.findAll(paginationDto);
+
+    return {
+      ...result,
+      items: result.items.map((company) =>
+        this.companiesService.toResponse(company),
+      ),
+    };
   }
 
   @Get(':id')
-  findOne(
+  async findOne(
     @Param() { id }: IsValidMongoIdDto,
     @AccountId() accountId: string,
     @AccountRole() accountRole: AuthRole,
   ) {
     this.assertSelfOrAdmin(id, accountId, accountRole);
-    return this.companiesService.findOne(id);
+    return this.companiesService.toResponse(
+      await this.companiesService.findOne(id),
+    );
   }
 
   @Patch(':id/approve')
   @Roles(AuthRole.ADMIN)
-  approve(@Param() { id }: IsValidMongoIdDto) {
-    return this.companiesService.approve(id);
+  async approve(@Param() { id }: IsValidMongoIdDto) {
+    return this.companiesService.toResponse(
+      await this.companiesService.approve(id),
+    );
   }
 
   @Patch(':id')
-  update(
+  async update(
     @Param() { id }: IsValidMongoIdDto,
     @AccountId() accountId: string,
     @AccountRole() accountRole: AuthRole,
     @Body() updateCompanyDto: UpdateCompanyDto,
   ) {
     this.assertSelf(id, accountId, accountRole);
-    return this.companiesService.update(id, updateCompanyDto);
+    return this.companiesService.toResponse(
+      await this.companiesService.update(id, updateCompanyDto),
+    );
+  }
+
+  @Patch(':id/logo')
+  @UseInterceptors(FileInterceptor('logo', { limits: uploadLimits }))
+  setLogo(
+    @Param() { id }: IsValidMongoIdDto,
+    @AccountId() accountId: string,
+    @AccountRole() accountRole: AuthRole,
+    @UploadedFile(uploadFilePipe) file: Express.Multer.File,
+  ) {
+    this.assertSelf(id, accountId, accountRole);
+    return this.companiesService.setLogo(id, file);
+  }
+
+  @Delete(':id/logo')
+  removeLogo(
+    @Param() { id }: IsValidMongoIdDto,
+    @AccountId() accountId: string,
+    @AccountRole() accountRole: AuthRole,
+  ) {
+    this.assertSelf(id, accountId, accountRole);
+    return this.companiesService.removeLogo(id);
   }
 
   @Patch(':id/password')
@@ -76,13 +115,15 @@ export class CompaniesController {
   }
 
   @Delete(':id')
-  remove(
+  async remove(
     @Param() { id }: IsValidMongoIdDto,
     @AccountId() accountId: string,
     @AccountRole() accountRole: AuthRole,
   ) {
     this.assertSelfOrAdmin(id, accountId, accountRole);
-    return this.companiesService.remove(id);
+    return this.companiesService.toResponse(
+      await this.companiesService.remove(id),
+    );
   }
 
   private assertSelf(

@@ -5,6 +5,13 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, UpdateQuery } from 'mongoose';
+import { AwsS3Service } from '../aws-s3/aws-s3.service.js';
+import {
+  ImageKind,
+  PROCESSED_IMAGE_CONTENT_TYPE,
+  processImage,
+} from '../aws-s3/process-image.js';
+import { StoragePrefix } from '../aws-s3/storage-prefix.js';
 import { EmailClaimsService } from '../email-claims/email-claims.service.js';
 import { hashChangedPassword } from '../shared/crypto/change-password.js';
 import { ChangePasswordDto } from '../shared/dto/change-password.dto.js';
@@ -31,7 +38,51 @@ export class CompaniesService {
   constructor(
     @InjectModel(Company.name) private readonly companyModel: Model<Company>,
     private readonly emailClaims: EmailClaimsService,
+    private readonly s3: AwsS3Service,
   ) {}
+
+  toResponse(company: CompanyDocument) {
+    const { logoKey, ...rest } = company.toJSON();
+
+    return { ...rest, logoUrl: this.s3.publicUrl(logoKey) };
+  }
+
+  async setLogo(id: string, file: Express.Multer.File) {
+    const company = await this.findOne(id);
+    const body = await processImage(file.buffer, ImageKind.LOGO);
+    const key = this.s3.newKey(StoragePrefix.COMPANY_LOGOS);
+
+    await this.s3.upload(key, body, PROCESSED_IMAGE_CONTENT_TYPE);
+    const updated = await this.companyModel.findByIdAndUpdate(
+      id,
+      { $set: { logoKey: key } },
+      { new: true },
+    );
+    if (!updated) {
+      await this.s3.deleteQuietly(key);
+      throw new NotFoundException('Company not found');
+    }
+
+    await this.s3.deleteQuietly(company.logoKey);
+
+    return this.toResponse(updated);
+  }
+
+  async removeLogo(id: string) {
+    const company = await this.findOne(id);
+    if (!company.logoKey) throw new NotFoundException('Logo not found');
+
+    const updated = await this.companyModel.findByIdAndUpdate(
+      id,
+      { $set: { logoKey: '' } },
+      { new: true },
+    );
+    if (!updated) throw new NotFoundException('Company not found');
+
+    await this.s3.deleteQuietly(company.logoKey);
+
+    return this.toResponse(updated);
+  }
 
   async findAll({ page, take }: PaginationDto) {
     const [items, total] = await Promise.all([
@@ -251,6 +302,7 @@ export class CompaniesService {
     if (!company) throw new NotFoundException('Company not found');
 
     await this.emailClaims.releaseAll(id);
+    await this.s3.deleteQuietly(company.logoKey);
 
     return company;
   }
