@@ -19,12 +19,13 @@ import { hashChangedPassword } from '../shared/crypto/change-password.js';
 import { ChangePasswordDto } from '../shared/dto/change-password.dto.js';
 import { PaginationDto } from '../shared/dto/pagination.dto.js';
 import { AuthRole } from '../shared/types/auth-role.js';
+import type { EmailChangeStore } from '../shared/types/email-change-store.js';
 import { OtpPurpose } from '../shared/types/otp-purpose.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { User, UserDocument } from './schema/user.schema.js';
 
 @Injectable()
-export class UsersService {
+export class UsersService implements EmailChangeStore {
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<User>,
     private readonly emailClaims: EmailClaimsService,

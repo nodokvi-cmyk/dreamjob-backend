@@ -10,7 +10,10 @@ import {
 } from '@react-email/components';
 import { render } from '@react-email/render';
 
-export type OtpEmailVariant = 'verification' | 'passwordReset';
+export enum OtpEmailVariant {
+  VERIFICATION = 'verification',
+  PASSWORD_RESET = 'passwordReset',
+}
 
 export interface OtpEmailProps {
   code: string;
@@ -19,12 +22,12 @@ export interface OtpEmailProps {
 }
 
 const copyByVariant = {
-  verification: {
+  [OtpEmailVariant.VERIFICATION]: {
     subject: 'Your DreamJob verification code',
     heading: 'Verify your email',
     intro: 'Use this code to finish signing up.',
   },
-  passwordReset: {
+  [OtpEmailVariant.PASSWORD_RESET]: {
     subject: 'Your DreamJob password reset code',
     heading: 'Reset your password',
     intro: 'Use this code to reset your password.',
@@ -37,7 +40,7 @@ const copyByVariant = {
 export function OtpEmail({
   code,
   expiresInMinutes,
-  variant = 'verification',
+  variant = OtpEmailVariant.VERIFICATION,
 }: OtpEmailProps) {
   const { subject, heading, intro } = copyByVariant[variant];
   return (
@@ -93,7 +96,8 @@ export async function renderOtpEmail(props: OtpEmailProps) {
     render(element, { plainText: true }),
   ]);
   return {
-    subject: copyByVariant[props.variant ?? 'verification'].subject,
+    subject:
+      copyByVariant[props.variant ?? OtpEmailVariant.VERIFICATION].subject,
     html,
     text,
   };

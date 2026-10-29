@@ -16,6 +16,7 @@ import { EmailClaimsService } from '../email-claims/email-claims.service.js';
 import { hashChangedPassword } from '../shared/crypto/change-password.js';
 import { ChangePasswordDto } from '../shared/dto/change-password.dto.js';
 import { PaginationDto } from '../shared/dto/pagination.dto.js';
+import type { EmailChangeStore } from '../shared/types/email-change-store.js';
 import { OtpPurpose } from '../shared/types/otp-purpose.js';
 import { UpdateCompanyDto } from './dto/update-company.dto.js';
 import { Company, CompanyDocument } from './schema/company.schema.js';
@@ -34,7 +35,7 @@ type CompanyChanges = Partial<
 >;
 
 @Injectable()
-export class CompaniesService {
+export class CompaniesService implements EmailChangeStore {
   constructor(
     @InjectModel(Company.name) private readonly companyModel: Model<Company>,
     private readonly emailClaims: EmailClaimsService,
