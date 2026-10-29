@@ -56,6 +56,20 @@ export class EmailChangeController {
     return this.emailChangeService.confirmUserNewEmail(accountId, codeDto);
   }
 
+  @Post('users/email-change/resend-new')
+  @HttpCode(HttpStatus.OK)
+  @Roles(AuthRole.USER, AuthRole.ADMIN)
+  resendUserNewEmailCode(@AccountId() accountId: string) {
+    return this.emailChangeService.resendUserNewEmailCode(accountId);
+  }
+
+  @Post('companies/email-change/resend-new')
+  @HttpCode(HttpStatus.OK)
+  @Roles(AuthRole.COMPANY)
+  resendCompanyNewEmailCode(@AccountId() accountId: string) {
+    return this.emailChangeService.resendCompanyNewEmailCode(accountId);
+  }
+
   @Post('companies/email-change/request')
   @HttpCode(HttpStatus.OK)
   @Roles(AuthRole.COMPANY)

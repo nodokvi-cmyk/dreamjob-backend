@@ -51,6 +51,14 @@ export class EmailChangeService {
     return this.confirmNewEmail(this.usersService, accountId, code);
   }
 
+  resendUserNewEmailCode(accountId: string): Promise<{ message: string }> {
+    return this.resendNewEmailCode(this.usersService, accountId);
+  }
+
+  resendCompanyNewEmailCode(accountId: string): Promise<{ message: string }> {
+    return this.resendNewEmailCode(this.companiesService, accountId);
+  }
+
   requestCompanyEmailChange(
     accountId: string,
     { newEmail }: ChangeEmailDto,
@@ -111,12 +119,38 @@ export class EmailChangeService {
     );
     await this.assertEmailAvailable(pendingEmail);
 
-    const { code: newCode, expiresAt } =
-      this.emailSender.createVerificationCode();
-    await this.emailSender.sendVerificationCode(pendingEmail, newCode);
+    return this.sendNewEmailCode(store, accountId, pendingEmail);
+  }
+
+  private async resendNewEmailCode(
+    store: EmailChangeStore,
+    accountId: string,
+  ): Promise<{ message: string }> {
+    const { pendingEmail, isVerified, OTPPurpose } =
+      await this.findEmailChangeAccount(store, accountId);
+
+    if (
+      !pendingEmail ||
+      !isVerified ||
+      OTPPurpose !== OtpPurpose.NEW_EMAIL_CHANGE
+    ) {
+      throw new BadRequestException('No email change is waiting for a code');
+    }
+    await this.assertEmailAvailable(pendingEmail);
+
+    return this.sendNewEmailCode(store, accountId, pendingEmail);
+  }
+
+  private async sendNewEmailCode(
+    store: EmailChangeStore,
+    accountId: string,
+    pendingEmail: string,
+  ): Promise<{ message: string }> {
+    const { code, expiresAt } = this.emailSender.createVerificationCode();
+    await this.emailSender.sendVerificationCode(pendingEmail, code);
     await store.setEmailChangeCode(
       accountId,
-      hashOtp(newCode, this.otpSecret()),
+      hashOtp(code, this.otpSecret()),
       expiresAt,
       OtpPurpose.NEW_EMAIL_CHANGE,
     );
