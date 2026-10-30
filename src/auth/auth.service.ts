@@ -20,9 +20,10 @@ import {
   isOtpValid,
   type OtpHolder,
 } from '../shared/crypto/otp-hash.js';
+import { otpCooldownSecondsLeft } from '../shared/crypto/otp-cooldown.js';
 import { hashPassword, isPasswordMatch } from '../shared/crypto/password.js';
 import {
-  emailNotVerifiedSignInError,
+  // emailNotVerifiedSignInError,
   emailNotVerifiedSignUpError,
 } from '../shared/errors/email-not-verified.js';
 import { withEmailConflict } from '../shared/mongo/with-email-conflict.js';
@@ -65,7 +66,7 @@ type SignableAccount = Pick<User, 'isVerified' | 'password'>;
 
 type SignUpCredentials = Pick<
   User,
-  'password' | 'OTPCode' | 'OTPCodeExpirationDate' | 'OTPPurpose'
+  'OTPCode' | 'OTPCodeExpirationDate' | 'OTPPurpose'
 >;
 
 @Injectable()
@@ -87,7 +88,6 @@ export class AuthService {
 
     return this.signUp(
       email,
-      createUserDto.password,
       (address) => this.usersService.findByEmail(address),
       (_id, credentials) =>
         this.userModel.create({
@@ -118,7 +118,6 @@ export class AuthService {
 
     return this.signUp(
       email,
-      createCompanyDto.password,
       (address) => this.companiesService.findByEmail(address),
       (_id, credentials) =>
         this.companyModel.create({
@@ -162,7 +161,7 @@ export class AuthService {
     email,
     code,
   }: VerifyEmailDto): Promise<{ token: string }> {
-    const user = await this.usersService.findByEmailWithVerificationCode(email);
+    const user = await this.usersService.claimOtpAttempt(email);
     if (!user || !this.isVerificationCodeValid(user, code)) {
       throw new UnauthorizedException('Invalid or expired verification code');
     }
@@ -176,8 +175,7 @@ export class AuthService {
     email,
     code,
   }: VerifyEmailDto): Promise<{ token: string }> {
-    const company =
-      await this.companiesService.findByEmailWithVerificationCode(email);
+    const company = await this.companiesService.claimOtpAttempt(email);
     if (!company || !this.isVerificationCodeValid(company, code)) {
       throw new UnauthorizedException('Invalid or expired verification code');
     }
@@ -209,9 +207,9 @@ export class AuthService {
   }
 
   async resendUserCode({ email }: EmailDto): Promise<{ message: string }> {
-    const user = await this.usersService.findByEmail(email);
+    const user = await this.usersService.findByEmailWithVerificationCode(email);
 
-    if (user && !user.isVerified) {
+    if (user && !user.isVerified && !otpCooldownSecondsLeft(user)) {
       await this.issueVerificationCode(email, (otpHash, expiresAt, purpose) =>
         this.usersService.setVerificationCode(
           email,
@@ -226,9 +224,10 @@ export class AuthService {
   }
 
   async resendCompanyCode({ email }: EmailDto): Promise<{ message: string }> {
-    const company = await this.companiesService.findByEmail(email);
+    const company =
+      await this.companiesService.findByEmailWithVerificationCode(email);
 
-    if (company && !company.isVerified) {
+    if (company && !company.isVerified && !otpCooldownSecondsLeft(company)) {
       await this.issueVerificationCode(email, (otpHash, expiresAt, purpose) =>
         this.companiesService.setVerificationCode(
           email,
@@ -243,7 +242,9 @@ export class AuthService {
   }
 
   async forgotUserPassword({ email }: EmailDto): Promise<{ message: string }> {
-    if (await this.usersService.findByEmail(email)) {
+    const user = await this.usersService.findByEmailWithVerificationCode(email);
+
+    if (user && !otpCooldownSecondsLeft(user)) {
       await this.issuePasswordResetCode(email, (otpHash, expiresAt, purpose) =>
         this.usersService.setVerificationCode(
           email,
@@ -260,7 +261,10 @@ export class AuthService {
   async forgotCompanyPassword({
     email,
   }: EmailDto): Promise<{ message: string }> {
-    if (await this.companiesService.findByEmail(email)) {
+    const company =
+      await this.companiesService.findByEmailWithVerificationCode(email);
+
+    if (company && !otpCooldownSecondsLeft(company)) {
       await this.issuePasswordResetCode(email, (otpHash, expiresAt, purpose) =>
         this.companiesService.setVerificationCode(
           email,
@@ -279,7 +283,7 @@ export class AuthService {
   ): Promise<{ message: string }> {
     const { email } = resetPasswordDto;
     const passwordHash = await this.hashResetPassword(
-      await this.usersService.findByEmailWithVerificationCode(email),
+      await this.usersService.claimOtpAttempt(email),
       resetPasswordDto,
     );
     await this.usersService.resetPassword(email, passwordHash);
@@ -292,7 +296,7 @@ export class AuthService {
   ): Promise<{ message: string }> {
     const { email } = resetPasswordDto;
     const passwordHash = await this.hashResetPassword(
-      await this.companiesService.findByEmailWithVerificationCode(email),
+      await this.companiesService.claimOtpAttempt(email),
       resetPasswordDto,
     );
     await this.companiesService.resetPassword(email, passwordHash);
@@ -301,18 +305,28 @@ export class AuthService {
   }
 
   async getCurrentAccount(accountId: string, accountRole: AuthRole) {
-    return accountRole === AuthRole.COMPANY
-      ? this.companiesService.toResponse(
-          await this.companiesService.findOne(accountId),
-        )
-      : this.usersService.toResponse(
-          await this.usersService.findOne(accountId),
-        );
+    if (accountRole === AuthRole.COMPANY) {
+      const [company, passwordSetupRequired] = await Promise.all([
+        this.companiesService.findOne(accountId),
+        this.companiesService.isPasswordSetupRequired(accountId),
+      ]);
+
+      return {
+        ...this.companiesService.toResponse(company),
+        passwordSetupRequired,
+      };
+    }
+
+    const [user, passwordSetupRequired] = await Promise.all([
+      this.usersService.findOne(accountId),
+      this.usersService.isPasswordSetupRequired(accountId),
+    ]);
+
+    return { ...this.usersService.toResponse(user), passwordSetupRequired };
   }
 
   private async signUp(
     email: string,
-    plainPassword: string,
     findSameTypeAccount: (
       email: string,
     ) => Promise<Pick<User, 'isVerified'> | null>,
@@ -331,7 +345,7 @@ export class AuthService {
 
     try {
       await this.assertNoAccountWithEmail(email);
-      const credentials = await this.prepareSignUp(email, plainPassword);
+      const credentials = await this.prepareSignUp(email);
       await withEmailConflict(() => create(accountId, credentials));
     } catch (error: unknown) {
       await this.emailClaims.release(email, accountId);
@@ -437,16 +451,11 @@ export class AuthService {
     }
   }
 
-  private async prepareSignUp(
-    email: string,
-    plainPassword: string,
-  ): Promise<SignUpCredentials> {
-    const password = await hashPassword(plainPassword);
+  private async prepareSignUp(email: string): Promise<SignUpCredentials> {
     const { code, expiresAt } = this.emailSender.createVerificationCode();
     await this.emailSender.sendVerificationCode(email, code);
 
     return {
-      password,
       OTPCode: hashOtp(code, this.otpSecret()),
       OTPCodeExpirationDate: expiresAt,
       OTPPurpose: OtpPurpose.EMAIL_VERIFICATION,
@@ -508,9 +517,9 @@ export class AuthService {
       throw new UnauthorizedException('Email or password is invalid');
     }
 
-    if (!account.isVerified) {
-      throw emailNotVerifiedSignInError();
-    }
+    // if (!account.isVerified) {
+    //   throw emailNotVerifiedSignInError();
+    // }
 
     return account;
   }
