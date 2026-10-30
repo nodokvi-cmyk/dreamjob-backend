@@ -11,6 +11,9 @@ export interface EmailChangeAccount {
 
 export interface EmailChangeStore {
   findForEmailChange(accountId: string): Promise<EmailChangeAccount | null>;
+  claimEmailChangeAttempt(
+    accountId: string,
+  ): Promise<EmailChangeAccount | null>;
   startEmailChange(
     accountId: string,
     pendingEmail: string,
