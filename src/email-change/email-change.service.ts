@@ -9,6 +9,10 @@ import { ConfigService } from '@nestjs/config';
 import { CompaniesService } from '../companies/companies.service.js';
 import { EmailClaimsService } from '../email-claims/email-claims.service.js';
 import { EmailSenderService } from '../email-sender/email-sender.service.js';
+import {
+  otpCooldownError,
+  otpCooldownSecondsLeft,
+} from '../shared/crypto/otp-cooldown.js';
 import { hashOtp, isOtpValid } from '../shared/crypto/otp-hash.js';
 import { withEmailConflict } from '../shared/mongo/with-email-conflict.js';
 import type {
@@ -86,6 +90,7 @@ export class EmailChangeService {
     newEmail: string,
   ): Promise<{ message: string }> {
     const account = await this.findEmailChangeAccount(store, accountId);
+    this.assertCooldownPassed(account);
 
     if (newEmail === account.email) {
       throw new BadRequestException(
@@ -111,7 +116,7 @@ export class EmailChangeService {
     accountId: string,
     code: string,
   ): Promise<{ message: string }> {
-    const account = await this.findEmailChangeAccount(store, accountId);
+    const account = await this.claimAttempt(store, accountId);
     const pendingEmail = this.getPendingEmail(
       account,
       code,
@@ -126,8 +131,8 @@ export class EmailChangeService {
     store: EmailChangeStore,
     accountId: string,
   ): Promise<{ message: string }> {
-    const { pendingEmail, isVerified, OTPPurpose } =
-      await this.findEmailChangeAccount(store, accountId);
+    const account = await this.findEmailChangeAccount(store, accountId);
+    const { pendingEmail, isVerified, OTPPurpose } = account;
 
     if (
       !pendingEmail ||
@@ -136,6 +141,7 @@ export class EmailChangeService {
     ) {
       throw new BadRequestException('No email change is waiting for a code');
     }
+    this.assertCooldownPassed(account);
     await this.assertEmailAvailable(pendingEmail);
 
     return this.sendNewEmailCode(store, accountId, pendingEmail);
@@ -163,7 +169,7 @@ export class EmailChangeService {
     accountId: string,
     code: string,
   ): Promise<{ message: string }> {
-    const account = await this.findEmailChangeAccount(store, accountId);
+    const account = await this.claimAttempt(store, accountId);
     const pendingEmail = this.getPendingEmail(
       account,
       code,
@@ -195,6 +201,18 @@ export class EmailChangeService {
     return account;
   }
 
+  private async claimAttempt(
+    store: EmailChangeStore,
+    accountId: string,
+  ): Promise<EmailChangeAccount> {
+    const account = await store.claimEmailChangeAttempt(accountId);
+    if (!account) {
+      throw new UnauthorizedException('Invalid or expired verification code');
+    }
+
+    return account;
+  }
+
   private getPendingEmail(
     account: EmailChangeAccount,
     code: string,
@@ -211,6 +229,12 @@ export class EmailChangeService {
     }
 
     return pendingEmail;
+  }
+
+  private assertCooldownPassed(account: EmailChangeAccount): void {
+    const secondsLeft = otpCooldownSecondsLeft(account);
+
+    if (secondsLeft) throw otpCooldownError(secondsLeft);
   }
 
   private async assertEmailAvailable(email: string): Promise<void> {
