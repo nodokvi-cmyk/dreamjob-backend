@@ -20,6 +20,7 @@ import { ChangePasswordDto } from '../shared/dto/change-password.dto.js';
 import { PaginationDto } from '../shared/dto/pagination.dto.js';
 import { AuthRole } from '../shared/types/auth-role.js';
 import type { EmailChangeStore } from '../shared/types/email-change-store.js';
+import { otpAttemptsLeftFilter } from '../shared/crypto/otp-attempts.js';
 import { OtpPurpose } from '../shared/types/otp-purpose.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { User, UserDocument } from './schema/user.schema.js';
@@ -189,6 +190,7 @@ export class UsersService implements EmailChangeStore {
             OTPCode: 1,
             OTPCodeExpirationDate: 1,
             OTPPurpose: 1,
+            OTPAttempts: 1,
           },
         };
 
@@ -205,6 +207,25 @@ export class UsersService implements EmailChangeStore {
       .select('+OTPCode +OTPCodeExpirationDate +OTPPurpose');
   }
 
+  async isPasswordSetupRequired(id: string): Promise<boolean> {
+    const hasLogin = await this.userModel.exists({
+      _id: id,
+      $or: [{ password: { $exists: true } }, { googleId: { $exists: true } }],
+    });
+
+    return !hasLogin;
+  }
+
+  claimOtpAttempt(email: string): Promise<UserDocument | null> {
+    return this.userModel
+      .findOneAndUpdate(
+        { email, ...otpAttemptsLeftFilter },
+        { $inc: { OTPAttempts: 1 } },
+        { returnDocument: 'after' },
+      )
+      .select('+OTPCode +OTPCodeExpirationDate +OTPPurpose');
+  }
+
   async setVerificationCode(
     email: string,
     otpHash: string,
@@ -218,6 +239,7 @@ export class UsersService implements EmailChangeStore {
           OTPCode: otpHash,
           OTPCodeExpirationDate: expiresAt,
           OTPPurpose: purpose,
+          OTPAttempts: 0,
         },
       },
     );
@@ -227,8 +249,13 @@ export class UsersService implements EmailChangeStore {
     await this.userModel.updateOne(
       { email },
       {
-        $set: { password: passwordHash },
-        $unset: { OTPCode: 1, OTPCodeExpirationDate: 1, OTPPurpose: 1 },
+        $set: { password: passwordHash, isVerified: true },
+        $unset: {
+          OTPCode: 1,
+          OTPCodeExpirationDate: 1,
+          OTPPurpose: 1,
+          OTPAttempts: 1,
+        },
       },
     );
   }
@@ -238,9 +265,24 @@ export class UsersService implements EmailChangeStore {
       { email },
       {
         $set: { isVerified: true },
-        $unset: { OTPCode: 1, OTPCodeExpirationDate: 1, OTPPurpose: 1 },
+        $unset: {
+          OTPCode: 1,
+          OTPCodeExpirationDate: 1,
+          OTPPurpose: 1,
+          OTPAttempts: 1,
+        },
       },
     );
+  }
+
+  claimEmailChangeAttempt(id: string): Promise<UserDocument | null> {
+    return this.userModel
+      .findOneAndUpdate(
+        { _id: id, ...otpAttemptsLeftFilter },
+        { $inc: { OTPAttempts: 1 } },
+        { returnDocument: 'after' },
+      )
+      .select('+OTPCode +OTPCodeExpirationDate +OTPPurpose +pendingEmail');
   }
 
   findForEmailChange(id: string): Promise<UserDocument | null> {
@@ -263,6 +305,7 @@ export class UsersService implements EmailChangeStore {
           OTPCode: otpHash,
           OTPCodeExpirationDate: expiresAt,
           OTPPurpose: OtpPurpose.CURRENT_EMAIL_CHANGE,
+          OTPAttempts: 0,
         },
       },
     );
@@ -281,6 +324,7 @@ export class UsersService implements EmailChangeStore {
           OTPCode: otpHash,
           OTPCodeExpirationDate: expiresAt,
           OTPPurpose: purpose,
+          OTPAttempts: 0,
         },
       },
     );
@@ -296,6 +340,7 @@ export class UsersService implements EmailChangeStore {
           OTPCode: 1,
           OTPCodeExpirationDate: 1,
           OTPPurpose: 1,
+          OTPAttempts: 1,
         },
       },
     );
