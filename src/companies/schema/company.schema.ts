@@ -56,6 +56,9 @@ export class Company {
   @Prop({ type: String, enum: OtpPurpose, required: false, select: false })
   OTPPurpose?: OtpPurpose;
 
+  @Prop({ type: Number, required: false, select: false })
+  OTPAttempts?: number;
+
   @Prop({
     type: String,
     required: false,

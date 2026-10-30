@@ -17,8 +17,6 @@ import { DirectorDto } from './director.dto.js';
 
 export class CreateCompanyDto extends PickType(CreateUserDto, [
   'email',
-  'password',
-  'confirmPassword',
   'phone',
 ]) {
   @Transform(trim)
