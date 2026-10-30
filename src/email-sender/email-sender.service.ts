@@ -10,10 +10,9 @@ import {
   OtpEmailVariant,
   renderOtpEmail,
 } from '../email/templates/otp-email.js';
+import { OTP_EXPIRATION_MINUTES } from '../shared/crypto/otp-cooldown.js';
 import { MAIL_TRANSPORT } from './mail-transport.provider.js';
 import type { MailTransport } from './mail-transport.provider.js';
-
-const OTP_EXPIRATION_MINUTES = 10;
 
 @Injectable()
 export class EmailSenderService {
