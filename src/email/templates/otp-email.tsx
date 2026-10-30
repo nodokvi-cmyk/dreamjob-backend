@@ -81,7 +81,8 @@ export function OtpEmail({
             </Text>
           </Section>
           <Text style={{ fontSize: 13, color: '#71717a' }}>
-            If you did not request this, you can ignore this email.
+            If you requested more than one code, only the newest one works. If
+            you did not request this, you can ignore this email.
           </Text>
         </Container>
       </Body>
