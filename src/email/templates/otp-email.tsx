@@ -25,7 +25,7 @@ const copyByVariant = {
   [OtpEmailVariant.VERIFICATION]: {
     subject: 'Your DreamJob verification code',
     heading: 'Verify your email',
-    intro: 'Use this code to finish signing up.',
+    intro: 'Use this code to verify your email.',
   },
   [OtpEmailVariant.PASSWORD_RESET]: {
     subject: 'Your DreamJob password reset code',
