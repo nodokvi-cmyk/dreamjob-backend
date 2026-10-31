@@ -487,8 +487,8 @@ export class AuthService {
     save: SaveCode,
   ): Promise<void> {
     const { code, expiresAt } = this.emailSender.createVerificationCode();
-    await save(hashOtp(code, this.otpSecret()), expiresAt, purpose);
     await send(code);
+    await save(hashOtp(code, this.otpSecret()), expiresAt, purpose);
   }
 
   private async hashResetPassword(
