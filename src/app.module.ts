@@ -11,6 +11,7 @@ import { AuthModule } from './auth/auth.module.js';
 import { EmailChangeModule } from './email-change/email-change.module.js';
 import { CompaniesModule } from './companies/companies.module.js';
 import { UsersModule } from './users/users.module.js';
+import { VacanciesModule } from './vacancies/vacancies.module.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -41,6 +42,7 @@ const isProduction = process.env.NODE_ENV === 'production';
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 30 }]),
     UsersModule,
     CompaniesModule,
+    VacanciesModule,
     AuthModule,
     EmailChangeModule,
   ],
