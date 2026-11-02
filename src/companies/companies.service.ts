@@ -19,6 +19,7 @@ import { PaginationDto } from '../shared/dto/pagination.dto.js';
 import type { EmailChangeStore } from '../shared/types/email-change-store.js';
 import { otpAttemptsLeftFilter } from '../shared/crypto/otp-attempts.js';
 import { OtpPurpose } from '../shared/types/otp-purpose.js';
+import { VacanciesService } from '../vacancies/vacancies.service.js';
 import { UpdateCompanyDto } from './dto/update-company.dto.js';
 import { Company, CompanyDocument } from './schema/company.schema.js';
 
@@ -41,6 +42,7 @@ export class CompaniesService implements EmailChangeStore {
     @InjectModel(Company.name) private readonly companyModel: Model<Company>,
     private readonly emailClaims: EmailClaimsService,
     private readonly s3: AwsS3Service,
+    private readonly vacancies: VacanciesService,
   ) {}
 
   toResponse(company: CompanyDocument) {
@@ -353,7 +355,20 @@ export class CompaniesService implements EmailChangeStore {
     return company;
   }
 
+  async revoke(id: string): Promise<CompanyDocument> {
+    const company = await this.companyModel.findByIdAndUpdate(
+      id,
+      { approved: false },
+      { new: true },
+    );
+    if (!company) throw new NotFoundException('Company not found');
+
+    return company;
+  }
+
   async remove(id: string): Promise<CompanyDocument> {
+    await this.vacancies.removeAllByCompany(id);
+
     const company = await this.companyModel.findByIdAndDelete(id);
     if (!company) throw new NotFoundException('Company not found');
 

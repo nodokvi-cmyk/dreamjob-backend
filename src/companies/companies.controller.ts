@@ -65,6 +65,14 @@ export class CompaniesController {
     );
   }
 
+  @Patch(':id/revoke')
+  @Roles(AuthRole.ADMIN)
+  async revoke(@Param() { id }: IsValidMongoIdDto) {
+    return this.companiesService.toResponse(
+      await this.companiesService.revoke(id),
+    );
+  }
+
   @Patch(':id')
   async update(
     @Param() { id }: IsValidMongoIdDto,

@@ -4,6 +4,7 @@ import { AwsS3Module } from '../aws-s3/aws-s3.module.js';
 import { EmailClaimsModule } from '../email-claims/email-claims.module.js';
 import { CompaniesController } from './companies.controller.js';
 import { CompaniesService } from './companies.service.js';
+import { VacanciesModule } from '../vacancies/vacancies.module.js';
 import { Company, companySchema } from './schema/company.schema.js';
 
 @Module({
@@ -11,6 +12,7 @@ import { Company, companySchema } from './schema/company.schema.js';
     MongooseModule.forFeature([{ name: Company.name, schema: companySchema }]),
     EmailClaimsModule,
     AwsS3Module,
+    VacanciesModule,
   ],
   controllers: [CompaniesController],
   providers: [CompaniesService],

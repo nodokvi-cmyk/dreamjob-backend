@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument } from 'mongoose';
 import { OtpPurpose } from '../../shared/types/otp-purpose.js';
 
 @Schema({ _id: false })
@@ -86,9 +86,6 @@ export class Company {
 
   @Prop({ type: String, default: '' })
   logoKey!: string;
-
-  @Prop({ type: [{ type: Types.ObjectId, ref: 'Vacancy' }], default: [] })
-  publishedVacancies!: Types.ObjectId[];
 
   declare readonly isProfileComplete: boolean;
 }
