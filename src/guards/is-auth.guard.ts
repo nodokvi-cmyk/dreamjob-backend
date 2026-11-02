@@ -7,6 +7,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import type { AuthenticatedRequest } from '../shared/types/authenticated-request.js';
 import { isJwtPayload } from '../shared/types/jwt-payload.js';
+import { getBearerToken } from './bearer-token.js';
 
 @Injectable()
 export class IsAuthGuard implements CanActivate {
@@ -14,7 +15,7 @@ export class IsAuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const token = this.getTokenFromHeaders(request);
+    const token = getBearerToken(request);
 
     if (!token) {
       throw new UnauthorizedException('Authentication token is required');
@@ -34,15 +35,5 @@ export class IsAuthGuard implements CanActivate {
     request.accountId = payload.accountId;
     request.accountRole = payload.accountRole;
     return true;
-  }
-
-  private getTokenFromHeaders(request: AuthenticatedRequest): string | null {
-    const authorization = request.headers.authorization;
-    if (!authorization) return null;
-
-    const [type, token] = authorization.split(' ');
-    if (!token) return null;
-
-    return type === 'Bearer' ? token : null;
   }
 }
