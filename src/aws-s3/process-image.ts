@@ -4,11 +4,16 @@ import sharp from 'sharp';
 export enum ImageKind {
   AVATAR = 'avatar',
   LOGO = 'logo',
+  VACANCY = 'vacancy',
 }
 
 export const PROCESSED_IMAGE_CONTENT_TYPE = 'image/webp';
 
-const MAX_IMAGE_SIDE = 512;
+const MAX_IMAGE_SIDE: Record<ImageKind, number> = {
+  [ImageKind.AVATAR]: 512,
+  [ImageKind.LOGO]: 512,
+  [ImageKind.VACANCY]: 1280,
+};
 const WEBP_QUALITY = 80;
 const ALLOWED_FORMATS: ReadonlySet<string> = new Set(['jpeg', 'png', 'webp']);
 
@@ -26,12 +31,13 @@ export async function processImage(
 
     if (!width || !height) throw new BadRequestException('Invalid image file');
 
-    const side = Math.min(MAX_IMAGE_SIDE, width, height);
+    const maxSide = MAX_IMAGE_SIDE[kind];
+    const side = Math.min(maxSide, width, height);
     const pipeline = sharp(input).rotate();
     const resized =
       kind === ImageKind.AVATAR
         ? pipeline.resize(side, side, { fit: 'cover' })
-        : pipeline.resize(MAX_IMAGE_SIDE, MAX_IMAGE_SIDE, {
+        : pipeline.resize(maxSide, maxSide, {
             fit: 'inside',
             withoutEnlargement: true,
           });
