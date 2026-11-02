@@ -10,5 +10,14 @@ export const trimEach = ({ value }: TransformFnParams): unknown =>
       )
     : value;
 
+export const toTrimmedList = ({ value }: TransformFnParams): unknown => {
+  const items: unknown = typeof value === 'string' ? [value] : value;
+  if (!Array.isArray(items)) return items;
+
+  return items.map((item: unknown) =>
+    typeof item === 'string' ? item.trim() : item,
+  );
+};
+
 export const trimLowercase = ({ value }: TransformFnParams): unknown =>
   typeof value === 'string' ? value.trim().toLowerCase() : value;
