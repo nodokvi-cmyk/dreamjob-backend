@@ -87,7 +87,7 @@ export class Vacancy {
   })
   status!: VacancyStatus;
 
-  @Prop({ type: String, required: false, trim: true, maxlength: 500 })
+  @Prop({ type: String, required: false, trim: true, maxlength: 1000 })
   rejectionReason?: string;
 
   declare readonly createdAt: Date;
