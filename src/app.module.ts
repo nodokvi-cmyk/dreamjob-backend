@@ -20,6 +20,7 @@ const isProduction = process.env.NODE_ENV === 'production';
     ConfigModule.forRoot({ isGlobal: true }),
     LoggerModule.forRoot({
       pinoHttp: {
+        redact: ['req.headers.authorization', 'req.headers.cookie'],
         transport: isProduction
           ? undefined
           : { target: 'pino-pretty', options: { singleLine: true } },
