@@ -7,7 +7,7 @@ describe('renderOtpEmail', () => {
       expiresInMinutes: 10,
     });
 
-    expect(subject).toBe('Your DreamJob verification code');
+    expect(subject).toBe('Your GetDreamJob verification code');
     expect(html).toContain('482913');
     expect(html).toContain('10 minutes');
     expect(text).toContain('482913');

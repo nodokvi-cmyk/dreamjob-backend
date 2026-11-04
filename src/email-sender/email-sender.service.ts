@@ -51,7 +51,7 @@ export class EmailSenderService {
 
     try {
       await this.transport.sendMail({
-        from: `DreamJob <${this.config.getOrThrow<string>('EMAIL_USER')}>`,
+        from: `GetDreamJob <${this.config.getOrThrow<string>('EMAIL_USER')}>`,
         to,
         subject,
         html,

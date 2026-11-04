@@ -24,12 +24,12 @@ export interface OtpEmailProps {
 
 const copyByVariant = {
   [OtpEmailVariant.VERIFICATION]: {
-    subject: 'Your DreamJob verification code',
+    subject: 'Your GetDreamJob verification code',
     heading: 'Verify your email',
     intro: 'Use this code to verify your email.',
   },
   [OtpEmailVariant.PASSWORD_RESET]: {
-    subject: 'Your DreamJob password reset code',
+    subject: 'Your GetDreamJob password reset code',
     heading: 'Reset your password',
     intro: 'Use this code to reset your password.',
   },
