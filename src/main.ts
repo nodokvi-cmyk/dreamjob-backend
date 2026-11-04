@@ -5,7 +5,9 @@ import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module.js';
 
-dns.setServers(['8.8.8.8', '8.8.4.4']);
+if (process.env.NODE_ENV !== 'production') {
+  dns.setServers(['8.8.8.8', '8.8.4.4']);
+}
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
