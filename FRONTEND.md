@@ -45,13 +45,13 @@ Visible occurrences found in the frontend `src/` on 2026-11-04 (change each to G
 ## Users (`/users`)
 
 - `GET /users` admin, paginated. `GET /users/:id` self or admin. `PATCH /users/:id` self only. `DELETE /users/:id` self or admin.
-- Response fields: `firstName`, `lastName`, `birthDate?`, `age?`, `email`, `phone`, `role`, `isVerified`, `avatarUrl`, `hasCv`, `isCvPublic`. Handle a missing `age`. `phone: ''` clears the phone. `null` or empty values on other fields are ignored.
+- Response fields: `_id`, `firstName`, `lastName`, `birthDate?`, `age?`, `email`, `googleId?`, `phone`, `role`, `isVerified`, `isCvPublic`, `appliedVacancies` (ids), `createdAt`, `updatedAt`, `avatarUrl`, `hasCv`. `__v` is also present; ignore it. Secrets and S3 keys are never returned. Handle a missing `age`. `phone: ''` clears the phone. `null` or empty values on other fields are ignored.
 - Files, one per request, max 4 MB: `PATCH|DELETE /users/:id/avatar` (multipart field `avatar`, JPEG/PNG/WebP), `PATCH|DELETE /users/:id/cv` (field `cv`, PDF only), `PATCH /users/:id/cv-visibility { isCvPublic }`, `GET /users/:id/cv` returns a link valid 5 minutes (self, or an approved company when the CV is public).
 
 ## Companies (`/companies`)
 
 - `GET /companies` admin. `GET /companies/:id` self or admin (private: has email, phone, director). `PATCH /companies/:id` self. `PATCH /companies/:id/approve` and `/revoke` admin. `DELETE /companies/:id` self or admin.
-- Response fields: `companyName`, `email`, `isVerified`, `approved`, `phone`, `location`, `description`, `website`, `operatingCities`, `director?`, `logoUrl`, `isProfileComplete`. `''` clears `phone`, `location`, `website`; `director: null` removes the director.
+- Response fields: `_id`, `googleId?`, `createdAt`, `updatedAt`, `companyName`, `email`, `isVerified`, `approved`, `phone`, `location`, `description`, `website`, `operatingCities`, `director?`, `logoUrl`, `isProfileComplete`. `''` clears `phone`, `location`, `website`; `director: null` removes the director.
 - Logo: `PATCH|DELETE /companies/:id/logo` (field `logo`).
 - An unapproved company cannot create or edit vacancies (403). Show "Waiting for admin approval".
 - No public company page route exists yet. Do not build one yet.
