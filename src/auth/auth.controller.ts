@@ -7,12 +7,12 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
 import { CreateCompanyDto } from '../companies/dto/create-company.dto.js';
 import { IsAuthGuard } from '../guards/is-auth.guard.js';
 import { AccountId } from '../shared/decorators/account-id.decorator.js';
 import { AccountRole } from '../shared/decorators/account-role.decorator.js';
 import { strictThrottle } from '../shared/throttle/strict-throttle.js';
+import { Throttle } from '../shared/throttle/throttle.decorator.js';
 import { AuthRole } from '../shared/types/auth-role.js';
 import { CreateUserDto } from '../users/dto/create-user.dto.js';
 import { AuthService } from './auth.service.js';

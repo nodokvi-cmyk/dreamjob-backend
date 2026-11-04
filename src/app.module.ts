@@ -3,29 +3,18 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { MongooseModule } from '@nestjs/mongoose';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { LoggerModule } from 'nestjs-pino';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AuthModule } from './auth/auth.module.js';
 import { EmailChangeModule } from './email-change/email-change.module.js';
 import { CompaniesModule } from './companies/companies.module.js';
+import { RateLimitGuard } from './shared/throttle/rate-limit.guard.js';
 import { UsersModule } from './users/users.module.js';
 import { VacanciesModule } from './vacancies/vacancies.module.js';
-
-const isProduction = process.env.NODE_ENV === 'production';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    LoggerModule.forRoot({
-      pinoHttp: {
-        redact: ['req.headers.authorization', 'req.headers.cookie'],
-        transport: isProduction
-          ? undefined
-          : { target: 'pino-pretty', options: { singleLine: true } },
-      },
-    }),
     MongooseModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -40,7 +29,6 @@ const isProduction = process.env.NODE_ENV === 'production';
         signOptions: { expiresIn: '1h' },
       }),
     }),
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 30 }]),
     UsersModule,
     CompaniesModule,
     VacanciesModule,
@@ -48,6 +36,6 @@ const isProduction = process.env.NODE_ENV === 'production';
     EmailChangeModule,
   ],
   controllers: [AppController],
-  providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers: [AppService, { provide: APP_GUARD, useClass: RateLimitGuard }],
 })
 export class AppModule {}

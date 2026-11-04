@@ -12,7 +12,6 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { Throttle } from '@nestjs/throttler';
 import { uploadFilePipe, uploadLimits } from '../aws-s3/upload-file.js';
 import { IsAuthGuard } from '../guards/is-auth.guard.js';
 import { RolesGuard } from '../guards/roles.guard.js';
@@ -23,6 +22,7 @@ import { ChangePasswordDto } from '../shared/dto/change-password.dto.js';
 import { IsValidMongoIdDto } from '../shared/dto/is-valid-mongo-id.dto.js';
 import { PaginationDto } from '../shared/dto/pagination.dto.js';
 import { strictThrottle } from '../shared/throttle/strict-throttle.js';
+import { Throttle } from '../shared/throttle/throttle.decorator.js';
 import { AuthRole } from '../shared/types/auth-role.js';
 import { CvVisibilityDto } from './dto/cv-visibility.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';

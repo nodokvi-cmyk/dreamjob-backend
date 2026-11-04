@@ -6,12 +6,12 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
 import { IsAuthGuard } from '../guards/is-auth.guard.js';
 import { RolesGuard } from '../guards/roles.guard.js';
 import { AccountId } from '../shared/decorators/account-id.decorator.js';
 import { Roles } from '../shared/decorators/roles.decorator.js';
 import { strictThrottle } from '../shared/throttle/strict-throttle.js';
+import { Throttle } from '../shared/throttle/throttle.decorator.js';
 import { AuthRole } from '../shared/types/auth-role.js';
 import { EmailChangeService } from './email-change.service.js';
 import { ChangeEmailDto } from './dto/change-email.dto.js';
