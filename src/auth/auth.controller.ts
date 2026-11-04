@@ -11,6 +11,7 @@ import { CreateCompanyDto } from '../companies/dto/create-company.dto.js';
 import { IsAuthGuard } from '../guards/is-auth.guard.js';
 import { AccountId } from '../shared/decorators/account-id.decorator.js';
 import { AccountRole } from '../shared/decorators/account-role.decorator.js';
+import { moderateThrottle } from '../shared/throttle/moderate-throttle.js';
 import { strictThrottle } from '../shared/throttle/strict-throttle.js';
 import { Throttle } from '../shared/throttle/throttle.decorator.js';
 import { AuthRole } from '../shared/types/auth-role.js';
@@ -55,14 +56,14 @@ export class AuthController {
 
   @Post('users/google')
   @HttpCode(HttpStatus.OK)
-  @Throttle(strictThrottle)
+  @Throttle(moderateThrottle)
   signInUserWithGoogle(@Body() googleSignInDto: GoogleSignInDto) {
     return this.authService.signInUserWithGoogle(googleSignInDto);
   }
 
   @Post('companies/google')
   @HttpCode(HttpStatus.OK)
-  @Throttle(strictThrottle)
+  @Throttle(moderateThrottle)
   signInCompanyWithGoogle(@Body() googleSignInDto: GoogleSignInDto) {
     return this.authService.signInCompanyWithGoogle(googleSignInDto);
   }
