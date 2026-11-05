@@ -8,13 +8,14 @@ import { AppService } from './app.service.js';
 import { AuthModule } from './auth/auth.module.js';
 import { EmailChangeModule } from './email-change/email-change.module.js';
 import { CompaniesModule } from './companies/companies.module.js';
+import { validateEnv } from './config/env.validation.js';
 import { RateLimitGuard } from './shared/throttle/rate-limit.guard.js';
 import { UsersModule } from './users/users.module.js';
 import { VacanciesModule } from './vacancies/vacancies.module.js';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     MongooseModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

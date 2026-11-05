@@ -11,6 +11,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.enableShutdownHooks();
   app.set('trust proxy', 1);
   const config = app.get(ConfigService);
   app.enableCors({ origin: config.getOrThrow<string>('FRONTEND_URI') });
