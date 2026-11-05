@@ -341,7 +341,7 @@ export class CompaniesService implements EmailChangeStore {
     const existing = await this.findOne(id);
     if (!existing.isProfileComplete) {
       throw new BadRequestException(
-        'Company profile is incomplete: companyName and description are required',
+        'Company profile is incomplete: companyName, description and a plan are required',
       );
     }
 

@@ -88,15 +88,14 @@ export class Company {
   @Prop({ type: String, default: '' })
   logoKey!: string;
 
-  @Prop({
-    type: String,
-    enum: BillingPlan,
-    default: BillingPlan.PAY_AS_YOU_PUBLISH,
-  })
-  plan!: BillingPlan;
+  @Prop({ type: String, enum: BillingPlan, required: false })
+  plan?: BillingPlan;
 
   @Prop({ type: Number, default: 0, min: 0 })
   credits!: number;
+
+  @Prop({ type: Number, default: 0, min: 0 })
+  purchasedCredits!: number;
 
   @Prop({ type: Date, required: false })
   planRenewsAt?: Date;
@@ -129,5 +128,9 @@ export const companySchema = SchemaFactory.createForClass(Company);
 companySchema.virtual('isProfileComplete').get(function (
   this: CompanyDocument,
 ): boolean {
-  return this.companyName !== '' && this.description !== '';
+  return (
+    this.companyName !== '' &&
+    this.description !== '' &&
+    this.plan !== undefined
+  );
 });
