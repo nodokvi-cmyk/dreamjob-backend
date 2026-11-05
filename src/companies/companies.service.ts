@@ -16,6 +16,7 @@ import { EmailClaimsService } from '../email-claims/email-claims.service.js';
 import { hashChangedPassword } from '../shared/crypto/change-password.js';
 import { ChangePasswordDto } from '../shared/dto/change-password.dto.js';
 import { PaginationDto } from '../shared/dto/pagination.dto.js';
+import { BillingPlan } from '../shared/types/billing-plan.js';
 import type { EmailChangeStore } from '../shared/types/email-change-store.js';
 import { otpAttemptsLeftFilter } from '../shared/crypto/otp-attempts.js';
 import { OtpPurpose } from '../shared/types/otp-purpose.js';
@@ -335,6 +336,18 @@ export class CompaniesService implements EmailChangeStore {
       newPassword,
     );
     await this.companyModel.updateOne({ _id: id }, { $set: { password } });
+  }
+
+  async chooseFreePlan(id: string): Promise<CompanyDocument> {
+    const company = await this.companyModel.findOneAndUpdate(
+      { _id: id, plan: { $exists: false } },
+      { $set: { plan: BillingPlan.PAY_AS_YOU_PUBLISH } },
+      { new: true },
+    );
+    if (company) return company;
+
+    await this.findOne(id);
+    throw new BadRequestException('A plan is already chosen');
   }
 
   async approve(id: string): Promise<CompanyDocument> {

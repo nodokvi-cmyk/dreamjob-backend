@@ -100,6 +100,9 @@ export class Company {
   @Prop({ type: Date, required: false })
   planRenewsAt?: Date;
 
+  @Prop({ type: Boolean, default: false })
+  planEndsAtPeriodEnd!: boolean;
+
   @Prop({
     type: String,
     required: false,

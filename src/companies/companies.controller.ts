@@ -25,6 +25,7 @@ import { strictThrottle } from '../shared/throttle/strict-throttle.js';
 import { Throttle } from '../shared/throttle/throttle.decorator.js';
 import { AuthRole } from '../shared/types/auth-role.js';
 import { CompaniesService } from './companies.service.js';
+import { ChoosePlanDto } from './dto/choose-plan.dto.js';
 import { UpdateCompanyDto } from './dto/update-company.dto.js';
 
 @Controller('companies')
@@ -83,6 +84,20 @@ export class CompaniesController {
     this.assertSelf(id, accountId, accountRole);
     return this.companiesService.toResponse(
       await this.companiesService.update(id, updateCompanyDto),
+    );
+  }
+
+  @Patch(':id/plan')
+  @Throttle(strictThrottle)
+  async choosePlan(
+    @Param() { id }: IsValidMongoIdDto,
+    @AccountId() accountId: string,
+    @AccountRole() accountRole: AuthRole,
+    @Body() _choosePlanDto: ChoosePlanDto,
+  ) {
+    this.assertSelf(id, accountId, accountRole);
+    return this.companiesService.toResponse(
+      await this.companiesService.chooseFreePlan(id),
     );
   }
 
