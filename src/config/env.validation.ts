@@ -13,6 +13,8 @@ const REQUIRED_KEYS = [
   'MY_AWS_ACCESS_KEY',
   'AWS_SECRET_ACCESS_KEY',
   'CLOUDFRONT_DOMAIN_NAME',
+  'STRIPE_API_KEY',
+  'STRIPE_WEBHOOK_SECRET',
 ] as const;
 
 function isFilled(value: unknown): value is string {

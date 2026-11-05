@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
+import { BillingPlan } from '../../shared/types/billing-plan.js';
 import { OtpPurpose } from '../../shared/types/otp-purpose.js';
 
 @Schema({ _id: false })
@@ -86,6 +87,37 @@ export class Company {
 
   @Prop({ type: String, default: '' })
   logoKey!: string;
+
+  @Prop({
+    type: String,
+    enum: BillingPlan,
+    default: BillingPlan.PAY_AS_YOU_PUBLISH,
+  })
+  plan!: BillingPlan;
+
+  @Prop({ type: Number, default: 0, min: 0 })
+  credits!: number;
+
+  @Prop({ type: Date, required: false })
+  planRenewsAt?: Date;
+
+  @Prop({
+    type: String,
+    required: false,
+    unique: true,
+    sparse: true,
+    select: false,
+  })
+  stripeCustomerId?: string;
+
+  @Prop({
+    type: String,
+    required: false,
+    unique: true,
+    sparse: true,
+    select: false,
+  })
+  stripeSubscriptionId?: string;
 
   declare readonly isProfileComplete: boolean;
 }
