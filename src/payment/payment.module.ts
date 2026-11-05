@@ -1,0 +1,29 @@
+import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { MongooseModule } from '@nestjs/mongoose';
+import Stripe from 'stripe';
+import { Company, companySchema } from '../companies/schema/company.schema.js';
+import { PaymentController } from './payment.controller.js';
+import { PaymentService } from './payment.service.js';
+import { Payment, paymentSchema } from './schema/payment.schema.js';
+import { STRIPE_CLIENT } from './stripe-client.js';
+
+@Module({
+  imports: [
+    MongooseModule.forFeature([
+      { name: Company.name, schema: companySchema },
+      { name: Payment.name, schema: paymentSchema },
+    ]),
+  ],
+  controllers: [PaymentController],
+  providers: [
+    PaymentService,
+    {
+      provide: STRIPE_CLIENT,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) =>
+        new Stripe(config.getOrThrow<string>('STRIPE_API_KEY')),
+    },
+  ],
+})
+export class PaymentModule {}
