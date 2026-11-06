@@ -14,11 +14,15 @@ import {
   Company,
   CompanyDocument,
 } from '../companies/schema/company.schema.js';
+import { EmailSenderService } from '../email-sender/email-sender.service.js';
 import { isDuplicateKeyError } from '../shared/mongo/is-duplicate-key-error.js';
 import { BillingPlan } from '../shared/types/billing-plan.js';
 import {
+  AUTHENTICATION_WAIT_DAYS,
   isPaidPlan,
   PaidPlan,
+  PLAN_END_AUTHENTICATION,
+  PLAN_END_REASON_KEY,
   PLAN_SETTINGS,
   STRIPE_APP_TAG,
 } from './plan-settings.js';
@@ -37,6 +41,7 @@ export class PaymentService {
   constructor(
     @Inject(STRIPE_CLIENT) private readonly stripe: Stripe,
     private readonly config: ConfigService,
+    private readonly emailSender: EmailSenderService,
     @InjectModel(Company.name)
     private readonly companyModel: Model<Company>,
     @InjectModel(Payment.name)
@@ -148,6 +153,12 @@ export class PaymentService {
         break;
       case 'customer.subscription.updated':
         await this.markPlanEnding(event.data.object);
+        break;
+      case 'invoice.payment_action_required':
+        await this.waitForAuthentication(event.data.object);
+        break;
+      case 'invoice.payment_failed':
+        await this.endPlanAfterFailedPayment(event.data.object);
         break;
       case 'customer.subscription.deleted':
         await this.endPlan(event.data.object);
@@ -296,6 +307,17 @@ export class PaymentService {
         },
       },
     );
+
+    const subscription =
+      await this.stripe.subscriptions.retrieve(subscriptionId);
+    if (
+      subscription.metadata[PLAN_END_REASON_KEY] === PLAN_END_AUTHENTICATION
+    ) {
+      await this.stripe.subscriptions.update(subscriptionId, {
+        cancel_at: '',
+        metadata: { [PLAN_END_REASON_KEY]: '' },
+      });
+    }
   }
 
   private async markPlanEnding(subscription: Stripe.Subscription) {
@@ -307,11 +329,146 @@ export class PaymentService {
     );
   }
 
+  private async findRenewalTarget(invoice: Stripe.Invoice) {
+    if (invoice.billing_reason !== 'subscription_cycle') return undefined;
+
+    const details = invoice.parent?.subscription_details;
+    if (details?.metadata?.app !== STRIPE_APP_TAG) return undefined;
+
+    const subscriptionId = idOf(details.subscription);
+    if (!subscriptionId) return undefined;
+
+    const company = await this.companyModel.findOne({
+      stripeSubscriptionId: subscriptionId,
+    });
+    if (!company || !isPaidPlan(company.plan)) return undefined;
+
+    return { subscriptionId, company, plan: company.plan };
+  }
+
+  private async needsAuthentication(invoice: Stripe.Invoice) {
+    if (!invoice.id) return false;
+
+    const payments = await this.stripe.invoicePayments.list({
+      invoice: invoice.id,
+    });
+    for (const item of payments.data) {
+      const intentId = idOf(item.payment.payment_intent);
+      if (!intentId) continue;
+
+      const intent = await this.stripe.paymentIntents.retrieve(intentId);
+      if (intent.status === 'requires_action') return true;
+    }
+
+    return false;
+  }
+
+  private async waitForAuthentication(invoice: Stripe.Invoice) {
+    const target = await this.findRenewalTarget(invoice);
+    if (!target) return;
+
+    const { subscriptionId, company, plan } = target;
+    const subscription =
+      await this.stripe.subscriptions.retrieve(subscriptionId);
+    if (
+      subscription.metadata[PLAN_END_REASON_KEY] === PLAN_END_AUTHENTICATION
+    ) {
+      return;
+    }
+
+    const cancelAt =
+      Math.floor(Date.now() / 1000) + AUTHENTICATION_WAIT_DAYS * 86_400;
+    await this.stripe.subscriptions.update(subscriptionId, {
+      cancel_at: cancelAt,
+      metadata: { [PLAN_END_REASON_KEY]: PLAN_END_AUTHENTICATION },
+    });
+
+    if (!invoice.hosted_invoice_url) return;
+
+    try {
+      await this.emailSender.sendPaymentActionNotice(
+        company.email,
+        PLAN_SETTINGS[plan].label,
+        invoice.hosted_invoice_url,
+        AUTHENTICATION_WAIT_DAYS,
+      );
+    } catch (error: unknown) {
+      this.logger.error(
+        'Payment confirmation email was not sent',
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
+
+  private async endPlanAfterFailedPayment(invoice: Stripe.Invoice) {
+    const target = await this.findRenewalTarget(invoice);
+    if (!target) return;
+    if (await this.needsAuthentication(invoice)) return;
+
+    const { subscriptionId, company, plan } = target;
+
+    try {
+      await this.stripe.subscriptions.cancel(subscriptionId);
+    } catch (error: unknown) {
+      if (
+        error instanceof Stripe.errors.StripeError &&
+        error.code === 'resource_missing'
+      ) {
+        return;
+      }
+      throw error;
+    }
+
+    await this.voidInvoiceQuietly(invoice.id);
+    await this.resetToFreePlan(subscriptionId);
+    await this.sendPlanEndedQuietly(company.email, plan);
+  }
+
   private async endPlan(subscription: Stripe.Subscription) {
     if (subscription.metadata.app !== STRIPE_APP_TAG) return;
 
-    await this.companyModel.updateOne(
-      { stripeSubscriptionId: subscription.id },
+    const previous = await this.resetToFreePlan(subscription.id);
+    if (
+      subscription.metadata[PLAN_END_REASON_KEY] !== PLAN_END_AUTHENTICATION
+    ) {
+      return;
+    }
+
+    await this.voidInvoiceQuietly(idOf(subscription.latest_invoice));
+    if (previous && isPaidPlan(previous.plan)) {
+      await this.sendPlanEndedQuietly(previous.email, previous.plan);
+    }
+  }
+
+  private async voidInvoiceQuietly(invoiceId: string | undefined) {
+    if (!invoiceId) return;
+
+    try {
+      await this.stripe.invoices.voidInvoice(invoiceId);
+    } catch (error: unknown) {
+      this.logger.warn(
+        error instanceof Error ? error.message : 'Could not void invoice',
+      );
+    }
+  }
+
+  private async sendPlanEndedQuietly(email: string, plan: PaidPlan) {
+    try {
+      await this.emailSender.sendPlanEndedNotice(
+        email,
+        PLAN_SETTINGS[plan].label,
+      );
+    } catch (error: unknown) {
+      this.logger.error(
+        'Plan ended email was not sent',
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
+
+  private resetToFreePlan(subscriptionId: string) {
+    return this.companyModel.findOneAndUpdate(
+      { stripeSubscriptionId: subscriptionId },
       {
         $set: {
           plan: BillingPlan.PAY_AS_YOU_PUBLISH,
@@ -320,6 +477,7 @@ export class PaymentService {
         },
         $unset: { stripeSubscriptionId: '', planRenewsAt: '' },
       },
+      { new: false },
     );
   }
 }
