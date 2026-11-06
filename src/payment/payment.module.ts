@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import Stripe from 'stripe';
 import { Company, companySchema } from '../companies/schema/company.schema.js';
+import { EmailSenderModule } from '../email-sender/email-sender.module.js';
 import { PaymentController } from './payment.controller.js';
 import { PaymentService } from './payment.service.js';
 import { Payment, paymentSchema } from './schema/payment.schema.js';
@@ -14,6 +15,7 @@ import { STRIPE_CLIENT } from './stripe-client.js';
       { name: Company.name, schema: companySchema },
       { name: Payment.name, schema: paymentSchema },
     ]),
+    EmailSenderModule,
   ],
   controllers: [PaymentController],
   providers: [
