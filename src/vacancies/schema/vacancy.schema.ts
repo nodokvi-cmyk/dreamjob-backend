@@ -10,13 +10,30 @@ export enum VacancyStatus {
 }
 
 export const EXPIRED_STATUS = 'expired';
+export const NOT_SUBMITTED_STATUS = 'notSubmitted';
 
-export type VacancyViewStatus = VacancyStatus | typeof EXPIRED_STATUS;
+export type AdminVacancyViewStatus = VacancyStatus | typeof EXPIRED_STATUS;
 
-export const VACANCY_VIEW_STATUSES: readonly VacancyViewStatus[] = [
+export type VacancyViewStatus =
+  AdminVacancyViewStatus | typeof NOT_SUBMITTED_STATUS;
+
+export const ADMIN_VACANCY_VIEW_STATUSES: readonly AdminVacancyViewStatus[] = [
   ...Object.values(VacancyStatus),
   EXPIRED_STATUS,
 ];
+
+export const VACANCY_VIEW_STATUSES: readonly VacancyViewStatus[] = [
+  ...ADMIN_VACANCY_VIEW_STATUSES,
+  NOT_SUBMITTED_STATUS,
+];
+
+export enum CreditSource {
+  PLAN = 'plan',
+  PURCHASED = 'purchased',
+}
+
+export const VACANCY_WINDOW_DAYS = 60;
+export const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export enum EmploymentType {
   FULL_TIME = 'full-time',
@@ -89,6 +106,24 @@ export class Vacancy {
 
   @Prop({ type: String, required: false, trim: true, maxlength: 1000 })
   rejectionReason?: string;
+
+  @Prop({ type: Date, required: false })
+  submittedAt?: Date;
+
+  @Prop({ type: String, enum: CreditSource, required: false })
+  creditSource?: CreditSource;
+
+  @Prop({ type: Date, required: false })
+  firstPublishedAt?: Date;
+
+  @Prop({ type: Date, required: false })
+  freeWindowEndsAt?: Date;
+
+  @Prop({ type: Date, required: false })
+  windowPausedAt?: Date;
+
+  @Prop({ type: String, required: false })
+  checkoutSessionId?: string;
 
   declare readonly createdAt: Date;
   declare readonly updatedAt: Date;
