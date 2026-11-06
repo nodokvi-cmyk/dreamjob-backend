@@ -12,12 +12,16 @@ import {
 import { PaginationDto } from '../../shared/dto/pagination.dto.js';
 import { trim } from '../../shared/transforms/string.transforms.js';
 import {
+  ADMIN_VACANCY_VIEW_STATUSES,
   Currency,
   EmploymentType,
   VACANCY_VIEW_STATUSES,
   WorkMode,
 } from '../schema/vacancy.schema.js';
-import type { VacancyViewStatus } from '../schema/vacancy.schema.js';
+import type {
+  AdminVacancyViewStatus,
+  VacancyViewStatus,
+} from '../schema/vacancy.schema.js';
 
 export const VACANCY_SORTS = [
   'date',
@@ -84,7 +88,11 @@ export class OwnVacanciesFilterDto extends VacancyFilterDto {
   status?: VacancyViewStatus;
 }
 
-export class AdminVacanciesFilterDto extends OwnVacanciesFilterDto {
+export class AdminVacanciesFilterDto extends VacancyFilterDto {
+  @IsOptional()
+  @IsIn(ADMIN_VACANCY_VIEW_STATUSES)
+  status?: AdminVacancyViewStatus;
+
   @IsOptional()
   @IsMongoId()
   companyId?: string;
