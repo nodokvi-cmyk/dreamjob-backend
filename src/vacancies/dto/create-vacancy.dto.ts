@@ -21,11 +21,12 @@ import {
 import {
   Currency,
   EmploymentType,
+  MS_PER_DAY,
+  VACANCY_WINDOW_DAYS,
   WorkMode,
 } from '../schema/vacancy.schema.js';
 
-export const MAX_DEADLINE_DAYS = 180;
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
+export const MAX_DEADLINE_DAYS = VACANCY_WINDOW_DAYS;
 const MAX_SALARY = 1_000_000_000;
 
 export class CreateVacancyDto {
