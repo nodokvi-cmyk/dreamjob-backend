@@ -15,8 +15,8 @@ import {
   CompanyDocument,
 } from '../companies/schema/company.schema.js';
 import { EmailSenderService } from '../email-sender/email-sender.service.js';
-import { isDuplicateKeyError } from '../shared/mongo/is-duplicate-key-error.js';
 import { BillingPlan } from '../shared/types/billing-plan.js';
+import { claimPayment } from './claim-payment.js';
 import {
   AUTHENTICATION_WAIT_DAYS,
   isPaidPlan,
@@ -28,6 +28,7 @@ import {
 } from './plan-settings.js';
 import { Payment, PaymentKind } from './schema/payment.schema.js';
 import { STRIPE_CLIENT } from './stripe-client.js';
+import { VacancyBillingService } from './vacancy-billing.service.js';
 
 function idOf(value: string | { id: string } | null | undefined) {
   if (!value) return undefined;
@@ -42,6 +43,7 @@ export class PaymentService {
     @Inject(STRIPE_CLIENT) private readonly stripe: Stripe,
     private readonly config: ConfigService,
     private readonly emailSender: EmailSenderService,
+    private readonly vacancyBilling: VacancyBillingService,
     @InjectModel(Company.name)
     private readonly companyModel: Model<Company>,
     @InjectModel(Payment.name)
@@ -112,7 +114,18 @@ export class PaymentService {
     const company = await this.companyModel.findById(companyId);
     if (!company) throw new NotFoundException('Company not found');
 
+    if (session.metadata.kind === PaymentKind.VACANCY) {
+      return {
+        kind: PaymentKind.VACANCY,
+        paid: session.payment_status === 'paid',
+        ...(await this.vacancyBilling.describe(session)),
+        credits: company.credits,
+        purchasedCredits: company.purchasedCredits,
+      };
+    }
+
     return {
+      kind: PaymentKind.SUBSCRIPTION,
       paid: session.payment_status === 'paid',
       plan: company.plan,
       credits: company.credits,
@@ -205,34 +218,14 @@ export class PaymentService {
     return current?.stripeCustomerId ?? customer.id;
   }
 
-  private async claimPayment(
-    sessionId: string,
-    companyId: string,
-    kind: PaymentKind,
-    plan: PaidPlan,
-  ) {
-    try {
-      const existing = await this.paymentModel.findOneAndUpdate(
-        { stripeSessionId: sessionId },
-        {
-          $setOnInsert: {
-            company: new Types.ObjectId(companyId),
-            kind,
-            plan,
-          },
-        },
-        { upsert: true, new: false },
-      );
-      return existing === null;
-    } catch (error: unknown) {
-      if (isDuplicateKeyError(error)) return false;
-      throw error;
-    }
-  }
-
   private async fulfillSession(session: Stripe.Checkout.Session) {
     if (session.metadata?.app !== STRIPE_APP_TAG) return;
     if (session.payment_status !== 'paid') return;
+
+    if (session.metadata.kind === PaymentKind.VACANCY) {
+      await this.vacancyBilling.fulfill(session);
+      return;
+    }
 
     const { companyId, plan } = session.metadata;
     if (!companyId || !Types.ObjectId.isValid(companyId)) return;
@@ -241,12 +234,12 @@ export class PaymentService {
     const subscriptionId = idOf(session.subscription);
     if (!subscriptionId) return;
 
-    const claimed = await this.claimPayment(
-      session.id,
-      companyId,
-      PaymentKind.SUBSCRIPTION,
+    const claimed = await claimPayment(this.paymentModel, session.id, {
+      company: new Types.ObjectId(companyId),
+      kind: PaymentKind.SUBSCRIPTION,
       plan,
-    );
+      amount: session.amount_total ?? undefined,
+    });
     if (!claimed) return;
 
     try {
