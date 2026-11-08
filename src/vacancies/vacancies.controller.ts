@@ -25,9 +25,12 @@ import { AccountRole } from '../shared/decorators/account-role.decorator.js';
 import { OptionalViewer } from '../shared/decorators/optional-viewer.decorator.js';
 import { Roles } from '../shared/decorators/roles.decorator.js';
 import { IsValidMongoIdDto } from '../shared/dto/is-valid-mongo-id.dto.js';
+import { strictThrottle } from '../shared/throttle/strict-throttle.js';
+import { Throttle } from '../shared/throttle/throttle.decorator.js';
 import { AuthRole } from '../shared/types/auth-role.js';
 import type { Viewer } from '../shared/types/viewer.js';
 import { CreateVacancyDto } from './dto/create-vacancy.dto.js';
+import { ExtendVacancyDto } from './dto/extend-vacancy.dto.js';
 import { RejectVacancyDto } from './dto/reject-vacancy.dto.js';
 import { UpdateVacancyDto } from './dto/update-vacancy.dto.js';
 import {
@@ -96,6 +99,26 @@ export class VacanciesController {
   @Roles(AuthRole.COMPANY)
   close(@Param() { id }: IsValidMongoIdDto, @AccountId() accountId: string) {
     return this.vacanciesService.close(id, accountId);
+  }
+
+  @Post(':id/submit')
+  @UseGuards(IsAuthGuard, RolesGuard)
+  @Roles(AuthRole.COMPANY)
+  @Throttle(strictThrottle)
+  submit(@Param() { id }: IsValidMongoIdDto, @AccountId() accountId: string) {
+    return this.vacanciesService.submit(id, accountId);
+  }
+
+  @Post(':id/extend')
+  @UseGuards(IsAuthGuard, RolesGuard)
+  @Roles(AuthRole.COMPANY)
+  @Throttle(strictThrottle)
+  extend(
+    @Param() { id }: IsValidMongoIdDto,
+    @AccountId() accountId: string,
+    @Body() { deadline }: ExtendVacancyDto,
+  ) {
+    return this.vacanciesService.extend(id, accountId, deadline);
   }
 
   @Patch(':id/approve')
