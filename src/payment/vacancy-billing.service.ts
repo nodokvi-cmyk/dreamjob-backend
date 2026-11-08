@@ -122,13 +122,18 @@ export class VacancyBillingService {
       );
     }
 
-    if (deadline.getTime() <= vacancy.freeWindowEndsAt.getTime()) {
+    const currentEnd = this.effectiveWindowEnd(
+      vacancy.freeWindowEndsAt,
+      vacancy.windowPausedAt,
+      now,
+    );
+    if (deadline.getTime() <= currentEnd.getTime()) {
       const extended = await this.saveExtension(vacancy, { deadline });
       await this.expireCheckoutQuietly(vacancy.checkoutSessionId);
       return { kind: 'done', vacancy: extended };
     }
 
-    const windowEnd = this.paidWindowEnd(vacancy.freeWindowEndsAt, now);
+    const windowEnd = this.paidWindowEnd(currentEnd, now);
     if (deadline.getTime() > windowEnd.getTime()) {
       throw new BadRequestException(
         `A paid extension can move the deadline to ${windowEnd.toISOString()} at most`,
@@ -305,14 +310,30 @@ export class VacancyBillingService {
     return new Date(Math.max(currentEnd.getTime(), now) + WINDOW_MS);
   }
 
+  private effectiveWindowEnd(
+    windowEnd: Date,
+    pausedAt: Date | undefined,
+    now: number,
+  ): Date {
+    if (!pausedAt) return windowEnd;
+
+    return new Date(
+      windowEnd.getTime() + Math.max(now - pausedAt.getTime(), 0),
+    );
+  }
+
   private async saveExtension(
     vacancy: VacancyRecord,
     changes: { deadline: Date; freeWindowEndsAt?: Date },
   ): Promise<VacancyRecord> {
+    const set =
+      vacancy.windowPausedAt && changes.freeWindowEndsAt
+        ? { ...changes, windowPausedAt: new Date() }
+        : changes;
     const updated = await this.vacancyModel
       .findOneAndUpdate(
         { _id: vacancy._id, updatedAt: vacancy.updatedAt },
-        { $set: changes, $unset: { checkoutSessionId: 1 } },
+        { $set: set, $unset: { checkoutSessionId: 1 } },
         { returnDocument: 'after' },
       )
       .lean<VacancyRecord>();
@@ -362,7 +383,14 @@ export class VacancyBillingService {
     }
 
     const now = Date.now();
-    const windowEnd = this.paidWindowEnd(vacancy.freeWindowEndsAt, now);
+    const windowEnd = this.paidWindowEnd(
+      this.effectiveWindowEnd(
+        vacancy.freeWindowEndsAt,
+        vacancy.windowPausedAt,
+        now,
+      ),
+      now,
+    );
     if (
       deadline.getTime() <= Math.max(vacancy.deadline.getTime(), now) ||
       deadline.getTime() > windowEnd.getTime()
