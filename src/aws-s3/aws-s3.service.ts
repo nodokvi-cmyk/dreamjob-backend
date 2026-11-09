@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   PutObjectCommand,
@@ -50,6 +51,18 @@ export class AwsS3Service {
         ContentType: contentType,
       }),
     );
+  }
+
+  async copy(sourceKey: string, prefix: StoragePrefix): Promise<string> {
+    const key = this.newKey(prefix);
+    await this.client.send(
+      new CopyObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        CopySource: `${this.bucket}/${sourceKey}`,
+      }),
+    );
+    return key;
   }
 
   async deleteQuietly(key: string | undefined): Promise<void> {
