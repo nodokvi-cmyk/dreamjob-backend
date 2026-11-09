@@ -19,5 +19,11 @@ export const toTrimmedList = ({ value }: TransformFnParams): unknown => {
   );
 };
 
+export const toBoolean = ({ value }: TransformFnParams): unknown => {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return value;
+};
+
 export const trimLowercase = ({ value }: TransformFnParams): unknown =>
   typeof value === 'string' ? value.trim().toLowerCase() : value;
