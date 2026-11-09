@@ -150,6 +150,7 @@ Built so far: apply, reapply and withdraw. Not yet built: the user's own list of
 - `useProfileCv`: `true` or `false`. `true` attaches a copy of the user's profile CV.
 - `cv`: one PDF file, at most 2 MB. Do not send it together with `useProfileCv: true` (400).
 - `coverLetter`: one PDF file, at most 2 MB.
+- `keepPrevious`: `true` or `false`, used only on a reapply (ignored on a first apply). `true` keeps the message, CV and cover letter the application already holds for every field the request does not send again. A field that is sent replaces the old one. After a reject the application still holds everything the user sent; after a withdraw it holds nothing, so there is nothing to keep.
 
 The same route sends a first application and a reapply. Response (both apply and withdraw):
 
@@ -167,7 +168,9 @@ Errors:
 - 409 `You cannot apply to this vacancy again`: both attempts are used, or the user withdrew an accepted application.
 - 403 for a company or admin token.
 
-**Reapply rules:** a user gets at most two submissions per vacancy, never two active at once. A reapply is allowed only after the first application ended (`rejected` by the company or `withdrawn` by the user), and never after withdrawing an `accepted` application (`locked: true`). A reapply replaces the old files and message with the newly sent ones; anything not sent is removed.
+**Reapply rules:** a user gets at most two submissions per vacancy, never two active at once. A reapply is allowed only after the first application ended (`rejected` by the company or `withdrawn` by the user), and never after withdrawing an `accepted` application (`locked: true`). A reapply replaces the old files and message with the newly sent ones; anything not sent is removed, unless `keepPrevious: true` is sent, which keeps every field that is not sent again.
+
+**Same-content warning (decided 2026-11-09):** when a user reapplies after a reject, the frontend warns if the new submission would repeat the rejected one. It counts as a repeat when `keepPrevious: true` is sent with nothing new, or when the old application had no message, no CV and no cover letter and the new one has none either (the user was rejected for an empty application and is sending an empty one again), or when the typed message equals the old one and no file changed. The text is the same in every case, for example: "Sending new files or a new message is recommended, because this application was rejected earlier and you are about to send the same content again." Two buttons, yes (send anyway) and no (go back to the form). The frontend needs the old message, `hasCv` and `hasCoverLetter` for this: they come from `GET /applications/mine` (built in phase 3). A reapply after a withdraw has no old content, so only the empty-versus-empty case can apply.
 
 **Withdraw:** `PATCH /applications/:id/withdraw` (no body). Allowed from `submitted`, `viewed`, `interview` and `accepted`, whatever the vacancy status. It deletes the CV copy, the cover letter and the message. Errors: 400 `Application is already withdrawn`, 400 `A rejected application cannot be withdrawn`, 403 `No permission` (someone else's), 404 `Application not found`, 409 `Application changed, try again` (the company changed the status at the same moment; reload and retry).
 
