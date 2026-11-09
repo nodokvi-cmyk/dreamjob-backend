@@ -29,11 +29,11 @@ import { ChoosePlanDto } from './dto/choose-plan.dto.js';
 import { UpdateCompanyDto } from './dto/update-company.dto.js';
 
 @Controller('companies')
-@UseGuards(IsAuthGuard, RolesGuard)
 export class CompaniesController {
   constructor(private readonly companiesService: CompaniesService) {}
 
   @Get()
+  @UseGuards(IsAuthGuard, RolesGuard)
   @Roles(AuthRole.ADMIN)
   async findAll(@Query() paginationDto: PaginationDto) {
     const result = await this.companiesService.findAll(paginationDto);
@@ -46,7 +46,13 @@ export class CompaniesController {
     };
   }
 
+  @Get(':id/public')
+  getPublicProfile(@Param() { id }: IsValidMongoIdDto) {
+    return this.companiesService.getPublicProfile(id);
+  }
+
   @Get(':id')
+  @UseGuards(IsAuthGuard, RolesGuard)
   async findOne(
     @Param() { id }: IsValidMongoIdDto,
     @AccountId() accountId: string,
@@ -59,6 +65,7 @@ export class CompaniesController {
   }
 
   @Patch(':id/approve')
+  @UseGuards(IsAuthGuard, RolesGuard)
   @Roles(AuthRole.ADMIN)
   async approve(@Param() { id }: IsValidMongoIdDto) {
     return this.companiesService.toResponse(
@@ -67,6 +74,7 @@ export class CompaniesController {
   }
 
   @Patch(':id/revoke')
+  @UseGuards(IsAuthGuard, RolesGuard)
   @Roles(AuthRole.ADMIN)
   async revoke(@Param() { id }: IsValidMongoIdDto) {
     return this.companiesService.toResponse(
@@ -75,6 +83,7 @@ export class CompaniesController {
   }
 
   @Patch(':id')
+  @UseGuards(IsAuthGuard, RolesGuard)
   async update(
     @Param() { id }: IsValidMongoIdDto,
     @AccountId() accountId: string,
@@ -88,6 +97,7 @@ export class CompaniesController {
   }
 
   @Patch(':id/plan')
+  @UseGuards(IsAuthGuard, RolesGuard)
   @Throttle(strictThrottle)
   async choosePlan(
     @Param() { id }: IsValidMongoIdDto,
@@ -102,6 +112,7 @@ export class CompaniesController {
   }
 
   @Patch(':id/logo')
+  @UseGuards(IsAuthGuard, RolesGuard)
   @UseInterceptors(FileInterceptor('logo', { limits: uploadLimits }))
   setLogo(
     @Param() { id }: IsValidMongoIdDto,
@@ -114,6 +125,7 @@ export class CompaniesController {
   }
 
   @Delete(':id/logo')
+  @UseGuards(IsAuthGuard, RolesGuard)
   removeLogo(
     @Param() { id }: IsValidMongoIdDto,
     @AccountId() accountId: string,
@@ -124,6 +136,7 @@ export class CompaniesController {
   }
 
   @Patch(':id/password')
+  @UseGuards(IsAuthGuard, RolesGuard)
   @Throttle(strictThrottle)
   async changePassword(
     @Param() { id }: IsValidMongoIdDto,
@@ -138,6 +151,7 @@ export class CompaniesController {
   }
 
   @Delete(':id')
+  @UseGuards(IsAuthGuard, RolesGuard)
   async remove(
     @Param() { id }: IsValidMongoIdDto,
     @AccountId() accountId: string,
