@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { ApplicationsModule } from '../applications/applications.module.js';
 import { AwsS3Module } from '../aws-s3/aws-s3.module.js';
 import { Company, companySchema } from '../companies/schema/company.schema.js';
 import { PaymentModule } from '../payment/payment.module.js';
@@ -15,6 +16,7 @@ import { VacanciesService } from './vacancies.service.js';
     ]),
     AwsS3Module,
     PaymentModule,
+    ApplicationsModule,
   ],
   controllers: [VacanciesController],
   providers: [VacanciesService],

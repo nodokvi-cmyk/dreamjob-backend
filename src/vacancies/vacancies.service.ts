@@ -10,6 +10,7 @@ import {
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Model, QueryFilter, Types, UpdateQuery } from 'mongoose';
 import type { ClientSession, Connection } from 'mongoose';
+import { ApplicationsService } from '../applications/applications.service.js';
 import { AwsS3Service } from '../aws-s3/aws-s3.service.js';
 import {
   ImageKind,
@@ -124,6 +125,7 @@ export class VacanciesService {
     @InjectConnection() private readonly connection: Connection,
     private readonly s3: AwsS3Service,
     private readonly billing: VacancyBillingService,
+    private readonly applications: ApplicationsService,
   ) {}
 
   toResponse(vacancy: VacancyRecord, includePrivate: boolean) {
@@ -557,6 +559,7 @@ export class VacanciesService {
     } else {
       await this.vacancyModel.deleteOne({ _id: id });
     }
+    await this.applications.removeForVacancies([vacancy._id]);
     await this.deleteFiles(vacancy.photoKeys);
 
     return this.toResponse(vacancy, true);
@@ -565,8 +568,8 @@ export class VacanciesService {
   async removeAllByCompany(companyId: string): Promise<void> {
     const vacancies = await this.vacancyModel
       .find({ company: companyId })
-      .select('photoKeys checkoutSessionId')
-      .lean<Pick<VacancyRecord, 'photoKeys' | 'checkoutSessionId'>[]>();
+      .select('_id photoKeys checkoutSessionId')
+      .lean<Pick<VacancyRecord, '_id' | 'photoKeys' | 'checkoutSessionId'>[]>();
 
     await Promise.all(
       vacancies.map(({ checkoutSessionId }) =>
@@ -574,6 +577,7 @@ export class VacanciesService {
       ),
     );
     await this.vacancyModel.deleteMany({ company: companyId });
+    await this.applications.removeForVacancies(vacancies.map(({ _id }) => _id));
     await this.deleteFiles(vacancies.flatMap(({ photoKeys }) => photoKeys));
   }
 
