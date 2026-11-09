@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, UpdateQuery } from 'mongoose';
+import { ApplicationsService } from '../applications/applications.service.js';
 import { assertPdf, PDF_CONTENT_TYPE } from '../aws-s3/assert-pdf.js';
 import { AwsS3Service } from '../aws-s3/aws-s3.service.js';
 import {
@@ -34,6 +35,7 @@ export class UsersService implements EmailChangeStore {
     private readonly emailClaims: EmailClaimsService,
     private readonly s3: AwsS3Service,
     private readonly companiesService: CompaniesService,
+    private readonly applications: ApplicationsService,
   ) {}
 
   toResponse(user: UserDocument) {
@@ -456,6 +458,7 @@ export class UsersService implements EmailChangeStore {
     if (!user) throw new NotFoundException('User not found');
 
     await this.emailClaims.releaseAll(id);
+    await this.applications.detachUser(id);
     await Promise.all([
       this.s3.deleteQuietly(user.avatarKey),
       this.s3.deleteQuietly(user.cvKey),

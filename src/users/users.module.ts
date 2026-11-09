@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { ApplicationsModule } from '../applications/applications.module.js';
 import { AwsS3Module } from '../aws-s3/aws-s3.module.js';
 import { CompaniesModule } from '../companies/companies.module.js';
 import { EmailClaimsModule } from '../email-claims/email-claims.module.js';
@@ -13,6 +14,7 @@ import { User, userSchema } from './schema/user.schema.js';
     EmailClaimsModule,
     AwsS3Module,
     CompaniesModule,
+    ApplicationsModule,
   ],
   controllers: [UsersController],
   providers: [UsersService],
