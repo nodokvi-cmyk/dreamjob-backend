@@ -141,6 +141,47 @@ All amounts are USD. Stripe hosts every payment page: the frontend only redirect
 - The webhook (`POST /payment/webhook`) is Stripe to backend only. Do not call it.
 - Rate limit: checkout, portal, plan, submit and extend allow 5 requests a minute (429).
 
+## Applications, sending and withdrawing (role `user` only)
+
+Built so far: apply, reapply and withdraw. Not yet built: the user's own list of applications, the company's applicant list, status changes by the company, links to the application files, and the Apply/Reapply/Applied state on cards and the detail page. Until those ship, the frontend can build the apply form and the withdraw action, but cannot yet know whether the user already applied (a repeat apply answers 409).
+
+**Apply or reapply:** `POST /vacancies/:id/applications`, `multipart/form-data`. All fields are optional, so a user can apply with nothing at all:
+- `message`: text, at most 100 words and 800 characters (trimmed; empty means no message).
+- `useProfileCv`: `true` or `false`. `true` attaches a copy of the user's profile CV.
+- `cv`: one PDF file, at most 2 MB. Do not send it together with `useProfileCv: true` (400).
+- `coverLetter`: one PDF file, at most 2 MB.
+
+The same route sends a first application and a reapply. Response (both apply and withdraw):
+
+```
+{ id, vacancy, status, message, hasCv, hasCoverLetter, submissions, locked, previousOutcome, appliedAt }
+```
+
+`status`: `submitted`, `viewed`, `interview`, `accepted`, `rejected`, `withdrawn`. `submissions` is 1 or 2. `previousOutcome` is `null`, or `withdrawn` / `rejected` after a reapply. `message` is `''` when none. `appliedAt` is the time of the latest submission.
+
+Errors:
+- 404 `Vacancy not found`: the vacancy does not exist or is not public.
+- 400 `This vacancy is closed`, `This vacancy has expired`, `This company is not accepting applications right now` (the company is not approved).
+- 400 `You have no profile CV` (with `useProfileCv: true`), 400 `Choose either your profile CV or a new CV file, not both`, 400 `Only PDF files are allowed`. A file over 2 MB gives 413.
+- 409 `You already applied to this vacancy`: an active application exists.
+- 409 `You cannot apply to this vacancy again`: both attempts are used, or the user withdrew an accepted application.
+- 403 for a company or admin token.
+
+**Reapply rules:** a user gets at most two submissions per vacancy, never two active at once. A reapply is allowed only after the first application ended (`rejected` by the company or `withdrawn` by the user), and never after withdrawing an `accepted` application (`locked: true`). A reapply replaces the old files and message with the newly sent ones; anything not sent is removed.
+
+**Withdraw:** `PATCH /applications/:id/withdraw` (no body). Allowed from `submitted`, `viewed`, `interview` and `accepted`, whatever the vacancy status. It deletes the CV copy, the cover letter and the message. Errors: 400 `Application is already withdrawn`, 400 `A rejected application cannot be withdrawn`, 403 `No permission` (someone else's), 404 `Application not found`, 409 `Application changed, try again` (the company changed the status at the same moment; reload and retry).
+
+**Apply flow in the UI (decided 2026-11-09):**
+- The full apply form (message, CV choice, cover letter) lives only on the vacancy details page. One CV source at a time: the profile CV or a new upload.
+- The Apply button on a vacancy card opens a small confirm window saying that a CV, a cover letter and a short message can be attached on the details page. Its buttons are "Apply anyway" (sends the apply request with no message and no files), "Go to details" (opens the details page with the apply form), and a separate "Cancel" (closes the window, sends nothing, the user keeps browsing). Reapply from a card works the same way, with "Reapply anyway".
+- A visitor who is not logged in also sees Apply; it goes to sign-in.
+- Show a disclaimer on the form when sending without a CV, without a cover letter or message, or with none of them.
+- On a reapply, show that this is a reapply after a withdraw or a reject (from `previousOutcome`) and that no attempts remain after it.
+- Withdraw asks first: "Withdraw and delete your CV and cover letter from this application?", with a warning that only one reapply is allowed.
+- Rate limit: apply and withdraw allow 5 requests a minute (429).
+
+Account deletion: deleting a user keeps their applications for the company as "Deleted user" with no name, files or message. Deleting a vacancy or a company deletes its applications.
+
 ## Not built yet (do not build screens for these)
 
-Applications, saved jobs, chatbot, public company page, past vacancies section, a billing history list inside the site (use the portal), Stripe payments for anything except plans, vacancy submits and vacancy extensions.
+Your applications list, applicant lists and status changes, application file links, Apply button states, saved jobs, chatbot, public company page, past vacancies section, a billing history list inside the site (use the portal), Stripe payments for anything except plans, vacancy submits and vacancy extensions.
