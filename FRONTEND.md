@@ -46,8 +46,9 @@ Visible occurrences found in the frontend `src/` on 2026-11-04 (change each to G
 ## Users (`/users`)
 
 - `GET /users` admin, paginated. `GET /users/:id` self or admin. `PATCH /users/:id` self only. `DELETE /users/:id` self or admin.
-- Response fields: `_id`, `firstName`, `lastName`, `birthDate?`, `age?`, `email`, `googleId?`, `phone`, `role`, `isVerified`, `isCvPublic`, `appliedVacancies` (ids), `createdAt`, `updatedAt`, `avatarUrl`, `hasCv`. `__v` is also present; ignore it. Secrets and S3 keys are never returned. Handle a missing `age`. `phone: ''` clears the phone. `null` or empty values on other fields are ignored.
-- Files, one per request, max 4 MB: `PATCH|DELETE /users/:id/avatar` (multipart field `avatar`, JPEG/PNG/WebP), `PATCH|DELETE /users/:id/cv` (field `cv`, PDF only), `PATCH /users/:id/cv-visibility { isCvPublic }`, `GET /users/:id/cv` returns a link valid 5 minutes (self, or an approved company when the CV is public).
+- Response fields: `_id`, `firstName`, `lastName`, `birthDate?`, `age?`, `email`, `googleId?`, `phone`, `role`, `isVerified`, `isCvPublic`, `isProfilePublic`, `appliedVacancies` (ids), `createdAt`, `updatedAt`, `avatarUrl`, `hasCv`. `__v` is also present; ignore it. Secrets and S3 keys are never returned. Handle a missing `age`. `phone: ''` clears the phone. `null` or empty values on other fields are ignored.
+- Files, one per request, max 4 MB: `PATCH|DELETE /users/:id/avatar` (multipart field `avatar`, JPEG/PNG/WebP), `PATCH|DELETE /users/:id/cv` (field `cv`, PDF only), `PATCH /users/:id/cv-visibility { isCvPublic }`, `PATCH /users/:id/profile-visibility { isProfilePublic }` (self; default `true`; does not change `isCvPublic`), `GET /users/:id/cv` returns a link valid 5 minutes (the owner always; an approved company only when `isProfilePublic` and `isCvPublic` are both true; everyone else, admins included, gets 404 `CV not found`).
+- **Public profile:** `GET /users/:id/public`, no login needed (send the token when you have one, so the owner is recognized). Unknown user: 404. Fields: `id`, `firstName`, `lastName`, `avatarUrl`, `isPrivate`. When `isPrivate` is true (profile switched off, viewer is not the owner) only those fields come back: show name, avatar and "This profile is private" (like a private Steam profile). Otherwise `email` and `phone` (may be `''`) and `hasCv` are also present: `hasCv` is true for the owner whenever a CV exists, and for an approved company only when a CV exists, `isCvPublic` is on and the profile is public. Show a "View CV" button only when `hasCv` is true; it calls `GET /users/:id/cv`. The owner always sees the full view, even with the profile switched off.
 
 ## Companies (`/companies`)
 
@@ -56,7 +57,7 @@ Visible occurrences found in the frontend `src/` on 2026-11-04 (change each to G
 - `isProfileComplete` is true only when `companyName` and `description` are not empty and a `plan` is chosen. `PATCH /companies/:id/approve` answers 400 until then (the admin screen must show why).
 - Logo: `PATCH|DELETE /companies/:id/logo` (field `logo`).
 - An unapproved company cannot create or edit vacancies, submit them or extend them (403). Show "Waiting for admin approval". Closing and deleting a vacancy and reading stay allowed.
-- No public company page route exists yet. Do not build one yet.
+- **Public company profile:** `GET /companies/:id/public`, no login needed. Approved companies only: a missing, unapproved or revoked company gives 404, so do not link a company name to this page unless it is approved. Fields: `id`, `companyName`, `description`, `website`, `location`, `operatingCities`, `logoUrl`, `email`, `phone`, `director` (`{ fullName, phone }` or `null`). Billing and account fields are never returned.
 
 ## Vacancies (`/vacancies`)
 
