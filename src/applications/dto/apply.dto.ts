@@ -19,4 +19,9 @@ export class ApplyDto {
   @Transform(toBoolean)
   @IsBoolean()
   useProfileCv?: boolean;
+
+  @IsOptional()
+  @Transform(toBoolean)
+  @IsBoolean()
+  keepPrevious?: boolean;
 }
