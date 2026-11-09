@@ -5,6 +5,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
+import { ApplicationsModule } from './applications/applications.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { EmailChangeModule } from './email-change/email-change.module.js';
 import { CompaniesModule } from './companies/companies.module.js';
@@ -34,6 +35,7 @@ import { VacanciesModule } from './vacancies/vacancies.module.js';
     UsersModule,
     CompaniesModule,
     VacanciesModule,
+    ApplicationsModule,
     AuthModule,
     EmailChangeModule,
     PaymentModule,
