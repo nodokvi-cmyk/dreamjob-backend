@@ -109,6 +109,27 @@ export class CompaniesService implements EmailChangeStore {
     return company;
   }
 
+  async getPublicProfile(id: string) {
+    const company = await this.companyModel.findOne({
+      _id: id,
+      approved: true,
+    });
+    if (!company) throw new NotFoundException('Company not found');
+
+    return {
+      id: company.id,
+      companyName: company.companyName,
+      description: company.description,
+      website: company.website,
+      location: company.location,
+      operatingCities: company.operatingCities,
+      logoUrl: this.s3.publicUrl(company.logoKey),
+      email: company.email,
+      phone: company.phone,
+      director: company.director ?? null,
+    };
+  }
+
   findByEmail(email: string): Promise<CompanyDocument | null> {
     return this.companyModel.findOne({ email });
   }
