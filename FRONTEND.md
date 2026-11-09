@@ -175,6 +175,7 @@ Errors:
 - The full apply form (message, CV choice, cover letter) lives only on the vacancy details page. One CV source at a time: the profile CV or a new upload.
 - The Apply button on a vacancy card opens a small confirm window saying that a CV, a cover letter and a short message can be attached on the details page. Its buttons are "Apply anyway" (sends the apply request with no message and no files), "Go to details" (opens the details page with the apply form), and a separate "Cancel" (closes the window, sends nothing, the user keeps browsing). Reapply from a card works the same way, with "Reapply anyway".
 - A visitor who is not logged in also sees Apply; it goes to sign-in.
+- Message counters (decided 2026-11-09): the textarea always shows a word counter, "42 / 100 words", counted like the backend (trim, split on whitespace, empty text is 0). The textarea has a hard `maxLength={800}`. A character counter, "790 / 800 characters", appears only once the text passes about 700 characters, turns red at 800, and its space is reserved so the layout does not jump.
 - Show a disclaimer on the form when sending without a CV, without a cover letter or message, or with none of them.
 - On a reapply, show that this is a reapply after a withdraw or a reject (from `previousOutcome`) and that no attempts remain after it.
 - Withdraw asks first: "Withdraw and delete your CV and cover letter from this application?", with a warning that only one reapply is allowed.
