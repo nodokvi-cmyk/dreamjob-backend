@@ -81,6 +81,12 @@ export class User {
   @Prop({ type: Boolean, default: true })
   isProfilePublic!: boolean;
 
+  @Prop({ type: Boolean, default: false })
+  isEmailPublic!: boolean;
+
+  @Prop({ type: Boolean, default: false })
+  isPhonePublic!: boolean;
+
   @Prop({ type: [{ type: Types.ObjectId, ref: 'Vacancy' }], default: [] })
   appliedVacancies!: Types.ObjectId[];
 

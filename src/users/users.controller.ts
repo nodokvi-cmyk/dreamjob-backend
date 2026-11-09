@@ -28,6 +28,7 @@ import { OptionalViewer } from '../shared/decorators/optional-viewer.decorator.j
 import type { Viewer } from '../shared/types/viewer.js';
 import { OptionalAuthGuard } from '../guards/optional-auth.guard.js';
 import { CvVisibilityDto } from './dto/cv-visibility.dto.js';
+import { ContactVisibilityDto } from './dto/contact-visibility.dto.js';
 import { ProfileVisibilityDto } from './dto/profile-visibility.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { UsersService } from './users.service.js';
@@ -162,6 +163,21 @@ export class UsersController {
   ) {
     this.assertSelf(id, accountId, accountRole);
     return this.usersService.setProfileVisibility(id, isProfilePublic);
+  }
+
+  @Patch(':id/contact-visibility')
+  @UseGuards(IsAuthGuard, RolesGuard)
+  setContactVisibility(
+    @Param() { id }: IsValidMongoIdDto,
+    @AccountId() accountId: string,
+    @AccountRole() accountRole: AuthRole,
+    @Body() contactVisibilityDto: ContactVisibilityDto,
+  ) {
+    this.assertSelf(id, accountId, accountRole);
+    return this.usersService.setContactVisibility({
+      id,
+      ...contactVisibilityDto,
+    });
   }
 
   @Patch(':id/password')

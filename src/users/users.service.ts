@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, UpdateQuery } from 'mongoose';
 import { assertPdf, PDF_CONTENT_TYPE } from '../aws-s3/assert-pdf.js';
@@ -19,6 +23,7 @@ import type { EmailChangeStore } from '../shared/types/email-change-store.js';
 import type { Viewer } from '../shared/types/viewer.js';
 import { otpAttemptsLeftFilter } from '../shared/crypto/otp-attempts.js';
 import { OtpPurpose } from '../shared/types/otp-purpose.js';
+import { ContactVisibilityDto } from './dto/contact-visibility.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { User, UserDocument } from './schema/user.schema.js';
 
@@ -137,6 +142,30 @@ export class UsersService implements EmailChangeStore {
     return this.toResponse(updated);
   }
 
+  async setContactVisibility({
+    id,
+    isEmailPublic,
+    isPhonePublic,
+  }: ContactVisibilityDto & { id: string }) {
+    const changes: Partial<Pick<User, 'isEmailPublic' | 'isPhonePublic'>> = {};
+    if (isEmailPublic !== undefined) changes.isEmailPublic = isEmailPublic;
+    if (isPhonePublic !== undefined) changes.isPhonePublic = isPhonePublic;
+    if (Object.keys(changes).length === 0) {
+      throw new BadRequestException(
+        'Send isEmailPublic, isPhonePublic or both',
+      );
+    }
+
+    const updated = await this.userModel.findByIdAndUpdate(
+      id,
+      { $set: changes },
+      { new: true },
+    );
+    if (!updated) throw new NotFoundException('User not found');
+
+    return this.toResponse(updated);
+  }
+
   async getPublicProfile(id: string, viewer: Viewer | null) {
     const user = await this.findOne(id);
     const base = {
@@ -155,8 +184,8 @@ export class UsersService implements EmailChangeStore {
 
     return {
       ...base,
-      email: user.email,
-      phone: user.phone,
+      ...(isOwner || user.isEmailPublic ? { email: user.email } : {}),
+      ...(isOwner || user.isPhonePublic ? { phone: user.phone } : {}),
       isPrivate: false,
       hasCv: canViewCv && user.cvKey !== '',
     };
