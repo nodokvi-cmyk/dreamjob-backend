@@ -24,16 +24,20 @@ import { PaginationDto } from '../shared/dto/pagination.dto.js';
 import { strictThrottle } from '../shared/throttle/strict-throttle.js';
 import { Throttle } from '../shared/throttle/throttle.decorator.js';
 import { AuthRole } from '../shared/types/auth-role.js';
+import { OptionalViewer } from '../shared/decorators/optional-viewer.decorator.js';
+import type { Viewer } from '../shared/types/viewer.js';
+import { OptionalAuthGuard } from '../guards/optional-auth.guard.js';
 import { CvVisibilityDto } from './dto/cv-visibility.dto.js';
+import { ProfileVisibilityDto } from './dto/profile-visibility.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { UsersService } from './users.service.js';
 
 @Controller('users')
-@UseGuards(IsAuthGuard, RolesGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
+  @UseGuards(IsAuthGuard, RolesGuard)
   @Roles(AuthRole.ADMIN)
   async findAll(@Query() paginationDto: PaginationDto) {
     const result = await this.usersService.findAll(paginationDto);
@@ -45,6 +49,7 @@ export class UsersController {
   }
 
   @Get(':id')
+  @UseGuards(IsAuthGuard, RolesGuard)
   async findOne(
     @Param() { id }: IsValidMongoIdDto,
     @AccountId() accountId: string,
@@ -54,16 +59,27 @@ export class UsersController {
     return this.usersService.toResponse(await this.usersService.findOne(id));
   }
 
+  @Get(':id/public')
+  @UseGuards(OptionalAuthGuard)
+  getPublicProfile(
+    @Param() { id }: IsValidMongoIdDto,
+    @OptionalViewer() viewer: Viewer | null,
+  ) {
+    return this.usersService.getPublicProfile(id, viewer);
+  }
+
   @Get(':id/cv')
+  @UseGuards(IsAuthGuard, RolesGuard)
   getCv(
     @Param() { id }: IsValidMongoIdDto,
     @AccountId() accountId: string,
     @AccountRole() accountRole: AuthRole,
   ) {
-    return this.usersService.getCvUrl(id, accountId, accountRole);
+    return this.usersService.getCvUrl(id, { accountId, accountRole });
   }
 
   @Patch(':id')
+  @UseGuards(IsAuthGuard, RolesGuard)
   async update(
     @Param() { id }: IsValidMongoIdDto,
     @AccountId() accountId: string,
@@ -77,6 +93,7 @@ export class UsersController {
   }
 
   @Patch(':id/avatar')
+  @UseGuards(IsAuthGuard, RolesGuard)
   @UseInterceptors(FileInterceptor('avatar', { limits: uploadLimits }))
   setAvatar(
     @Param() { id }: IsValidMongoIdDto,
@@ -89,6 +106,7 @@ export class UsersController {
   }
 
   @Delete(':id/avatar')
+  @UseGuards(IsAuthGuard, RolesGuard)
   removeAvatar(
     @Param() { id }: IsValidMongoIdDto,
     @AccountId() accountId: string,
@@ -99,6 +117,7 @@ export class UsersController {
   }
 
   @Patch(':id/cv')
+  @UseGuards(IsAuthGuard, RolesGuard)
   @UseInterceptors(FileInterceptor('cv', { limits: uploadLimits }))
   setCv(
     @Param() { id }: IsValidMongoIdDto,
@@ -111,6 +130,7 @@ export class UsersController {
   }
 
   @Delete(':id/cv')
+  @UseGuards(IsAuthGuard, RolesGuard)
   removeCv(
     @Param() { id }: IsValidMongoIdDto,
     @AccountId() accountId: string,
@@ -121,6 +141,7 @@ export class UsersController {
   }
 
   @Patch(':id/cv-visibility')
+  @UseGuards(IsAuthGuard, RolesGuard)
   setCvVisibility(
     @Param() { id }: IsValidMongoIdDto,
     @AccountId() accountId: string,
@@ -131,7 +152,20 @@ export class UsersController {
     return this.usersService.setCvVisibility(id, isCvPublic);
   }
 
+  @Patch(':id/profile-visibility')
+  @UseGuards(IsAuthGuard, RolesGuard)
+  setProfileVisibility(
+    @Param() { id }: IsValidMongoIdDto,
+    @AccountId() accountId: string,
+    @AccountRole() accountRole: AuthRole,
+    @Body() { isProfilePublic }: ProfileVisibilityDto,
+  ) {
+    this.assertSelf(id, accountId, accountRole);
+    return this.usersService.setProfileVisibility(id, isProfilePublic);
+  }
+
   @Patch(':id/password')
+  @UseGuards(IsAuthGuard, RolesGuard)
   @Throttle(strictThrottle)
   async changePassword(
     @Param() { id }: IsValidMongoIdDto,
@@ -146,6 +180,7 @@ export class UsersController {
   }
 
   @Delete(':id')
+  @UseGuards(IsAuthGuard, RolesGuard)
   async remove(
     @Param() { id }: IsValidMongoIdDto,
     @AccountId() accountId: string,

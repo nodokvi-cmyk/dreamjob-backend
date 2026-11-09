@@ -1,8 +1,4 @@
-import {
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, UpdateQuery } from 'mongoose';
 import { assertPdf, PDF_CONTENT_TYPE } from '../aws-s3/assert-pdf.js';
@@ -20,6 +16,7 @@ import { ChangePasswordDto } from '../shared/dto/change-password.dto.js';
 import { PaginationDto } from '../shared/dto/pagination.dto.js';
 import { AuthRole } from '../shared/types/auth-role.js';
 import type { EmailChangeStore } from '../shared/types/email-change-store.js';
+import type { Viewer } from '../shared/types/viewer.js';
 import { otpAttemptsLeftFilter } from '../shared/crypto/otp-attempts.js';
 import { OtpPurpose } from '../shared/types/otp-purpose.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
@@ -129,27 +126,69 @@ export class UsersService implements EmailChangeStore {
     return this.toResponse(updated);
   }
 
-  async getCvUrl(id: string, accountId: string, accountRole: AuthRole) {
+  async setProfileVisibility(id: string, isProfilePublic: boolean) {
+    const updated = await this.userModel.findByIdAndUpdate(
+      id,
+      { $set: { isProfilePublic } },
+      { new: true },
+    );
+    if (!updated) throw new NotFoundException('User not found');
+
+    return this.toResponse(updated);
+  }
+
+  async getPublicProfile(id: string, viewer: Viewer | null) {
     const user = await this.findOne(id);
-    await this.assertCanViewCv(user, accountId, accountRole);
-    if (!user.cvKey) throw new NotFoundException('CV not found');
+    const base = {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      avatarUrl: this.s3.publicUrl(user.avatarKey),
+    };
+
+    const isOwner = this.isOwner(user, viewer);
+    if (!isOwner && !user.isProfilePublic) {
+      return { ...base, isPrivate: true };
+    }
+
+    const canViewCv = await this.canViewCv(user, viewer);
+
+    return {
+      ...base,
+      email: user.email,
+      phone: user.phone,
+      isPrivate: false,
+      hasCv: canViewCv && user.cvKey !== '',
+    };
+  }
+
+  async getCvUrl(id: string, viewer: Viewer) {
+    const user = await this.findOne(id);
+    const canViewCv = await this.canViewCv(user, viewer);
+    if (!canViewCv || !user.cvKey) throw new NotFoundException('CV not found');
 
     return this.s3.presignedUrl(user.cvKey);
   }
 
-  private async assertCanViewCv(
+  private isOwner(user: UserDocument, viewer: Viewer | null): boolean {
+    return (
+      viewer !== null &&
+      viewer.accountRole === AuthRole.USER &&
+      viewer.accountId === user.id
+    );
+  }
+
+  private async canViewCv(
     user: UserDocument,
-    accountId: string,
-    accountRole: AuthRole,
-  ): Promise<void> {
-    if (accountRole === AuthRole.USER && accountId === user.id) return;
+    viewer: Viewer | null,
+  ): Promise<boolean> {
+    if (this.isOwner(user, viewer)) return true;
+    if (viewer?.accountRole !== AuthRole.COMPANY) return false;
+    if (!user.isProfilePublic || !user.isCvPublic) return false;
 
-    if (accountRole === AuthRole.COMPANY && user.isCvPublic) {
-      const company = await this.companiesService.findOne(accountId);
-      if (company.approved) return;
-    }
+    const company = await this.companiesService.findOne(viewer.accountId);
 
-    throw new ForbiddenException('No permission');
+    return company.approved;
   }
 
   async findAll({ page, take }: PaginationDto) {
