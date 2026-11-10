@@ -189,7 +189,12 @@ Account deletion: deleting a user keeps their applications for the company as "D
 
 ### My applications (role `user`)
 
-`GET /applications/mine?page=&take=&status=`: the user's own applications, newest `appliedAt` first. `status` filters by application status (any of the six). `take` defaults to 10, max 30. Response `{ items, total, page, take }`; each item is the apply response above plus:
+`GET /applications/mine?page=&take=&status=&q=&sort=`: the user's own applications, newest `appliedAt` first by default. `take` defaults to 10, max 30.
+- `status`: filters by application status (any of the six).
+- `q`: searches the vacancy title, up to 64 characters. Each typed word (at most 5) must start a word in the title, case ignored, in any order. It combines with `status` and `sort`; `total` respects it. Send it after a short typing pause and reset `page` to 1 when it changes.
+- `sort`: `-date` (default, newest first) or `date` (oldest first), by the time of the latest submission (`appliedAt`).
+
+ Response `{ items, total, page, take }`; each item is the apply response above plus:
 
 ```
 {
