@@ -100,8 +100,11 @@ export const userSchema = SchemaFactory.createForClass(User);
 userSchema.virtual('age').get(function (
   this: UserDocument,
 ): number | undefined {
+  return ageFrom(this.birthDate);
+});
+
+export function ageFrom(birth: Date | undefined): number | undefined {
   const today = new Date();
-  const birth = this.birthDate;
   if (!birth) return undefined;
   const hadBirthday =
     today.getUTCMonth() > birth.getUTCMonth() ||
@@ -110,4 +113,4 @@ userSchema.virtual('age').get(function (
   return (
     today.getUTCFullYear() - birth.getUTCFullYear() - (hadBirthday ? 0 : 1)
   );
-});
+}
