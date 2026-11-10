@@ -29,6 +29,16 @@ export const WITHDRAWABLE_APPLICATION_STATUSES: readonly ApplicationStatus[] = [
   ApplicationStatus.ACCEPTED,
 ];
 
+export const COMPANY_APPLICATION_STATUSES = [
+  ApplicationStatus.VIEWED,
+  ApplicationStatus.INTERVIEW,
+  ApplicationStatus.ACCEPTED,
+  ApplicationStatus.REJECTED,
+] as const;
+
+export type CompanyApplicationStatus =
+  (typeof COMPANY_APPLICATION_STATUSES)[number];
+
 export const MAX_APPLICATION_SUBMISSIONS = 2;
 export const MAX_APPLICATION_MESSAGE_WORDS = 100;
 export const MAX_APPLICATION_MESSAGE_LENGTH = 800;
