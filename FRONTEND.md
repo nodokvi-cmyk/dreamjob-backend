@@ -155,10 +155,10 @@ Built so far: apply, reapply and withdraw. Not yet built: the user's own list of
 The same route sends a first application and a reapply. Response (both apply and withdraw):
 
 ```
-{ id, vacancy, status, message, hasCv, hasCoverLetter, submissions, locked, previousOutcome, appliedAt }
+{ id, vacancy, status, message, hasCv, hasCoverLetter, submissions, locked, previousOutcome, appliedAt, firstAppliedAt }
 ```
 
-`status`: `submitted`, `viewed`, `interview`, `accepted`, `rejected`, `withdrawn`. `submissions` is 1 or 2. `previousOutcome` is `null`, or `withdrawn` / `rejected` after a reapply. `message` is `''` when none. `appliedAt` is the time of the latest submission.
+`status`: `submitted`, `viewed`, `interview`, `accepted`, `rejected`, `withdrawn`. `submissions` is 1 or 2. `previousOutcome` is `null`, or `withdrawn` / `rejected` after a reapply. `message` is `''` when none. `appliedAt` is the time of the latest submission; `firstAppliedAt` is the time of the first one and never changes, so on a reapply (`submissions` 2) show both, the original time in a quieter style and the reapply time as the main one (design is up to the frontend).
 
 Errors:
 - 404 `Vacancy not found`: the vacancy does not exist or is not public.

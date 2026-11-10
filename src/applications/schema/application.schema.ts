@@ -79,6 +79,9 @@ export class Application {
   @Prop({ type: Date, required: true })
   appliedAt!: Date;
 
+  @Prop({ type: Date, required: true })
+  firstAppliedAt!: Date;
+
   declare readonly createdAt: Date;
   declare readonly updatedAt: Date;
 }
