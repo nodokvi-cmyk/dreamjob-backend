@@ -141,9 +141,9 @@ All amounts are USD. Stripe hosts every payment page: the frontend only redirect
 - The webhook (`POST /payment/webhook`) is Stripe to backend only. Do not call it.
 - Rate limit: checkout, portal, plan, submit and extend allow 5 requests a minute (429).
 
-## Applications, sending and withdrawing (role `user` only)
+## Applications
 
-Built so far: apply, reapply and withdraw. Not yet built: the user's own list of applications, the company's applicant list, status changes by the company, links to the application files, and the Apply/Reapply/Applied state on cards and the detail page. Until those ship, the frontend can build the apply form and the withdraw action, but cannot yet know whether the user already applied (a repeat apply answers 409).
+Built: apply, reapply and withdraw (users), the user's own list, the company's applicant list, status changes by the company, and links to the application files. Not yet built: the Apply/Reapply/Applied state on vacancy cards and the detail page (`myApplication`, comes later). Until then, a card or detail page cannot tell whether the user already applied (a repeat apply answers 409); the "My applications" page can.
 
 **Apply or reapply:** `POST /vacancies/:id/applications`, `multipart/form-data`. All fields are optional, so a user can apply with nothing at all:
 - `message`: text, at most 100 words and 800 characters (trimmed; empty means no message).
@@ -170,7 +170,7 @@ Errors:
 
 **Reapply rules:** a user gets at most two submissions per vacancy, never two active at once. A reapply is allowed only after the first application ended (`rejected` by the company or `withdrawn` by the user), and never after withdrawing an `accepted` application (`locked: true`). A reapply replaces the old files and message with the newly sent ones; anything not sent is removed, unless `keepPrevious: true` is sent, which keeps every field that is not sent again.
 
-**Same-content warning (decided 2026-11-09):** when a user reapplies after a reject, the frontend warns if the new submission would repeat the rejected one. It counts as a repeat when `keepPrevious: true` is sent with nothing new, or when the old application had no message, no CV and no cover letter and the new one has none either (the user was rejected for an empty application and is sending an empty one again), or when the typed message equals the old one and no file changed. The text is the same in every case, for example: "Sending new files or a new message is recommended, because this application was rejected earlier and you are about to send the same content again." Two buttons, yes (send anyway) and no (go back to the form). The frontend needs the old message, `hasCv` and `hasCoverLetter` for this: they come from `GET /applications/mine` (built in phase 3). A reapply after a withdraw has no old content, so only the empty-versus-empty case can apply.
+**Same-content warning (decided 2026-11-09):** when a user reapplies after a reject, the frontend warns if the new submission would repeat the rejected one. It counts as a repeat when `keepPrevious: true` is sent with nothing new, or when the old application had no message, no CV and no cover letter and the new one has none either (the user was rejected for an empty application and is sending an empty one again), or when the typed message equals the old one and no file changed. The text is the same in every case, for example: "Sending new files or a new message is recommended, because this application was rejected earlier and you are about to send the same content again." Two buttons, yes (send anyway) and no (go back to the form). The frontend needs the old message, `hasCv` and `hasCoverLetter` for this: they come from `GET /applications/mine`. A reapply after a withdraw has no old content, so only the empty-versus-empty case can apply.
 
 **Withdraw:** `PATCH /applications/:id/withdraw` (no body). Allowed from `submitted`, `viewed`, `interview` and `accepted`, whatever the vacancy status. It deletes the CV copy, the cover letter and the message. Errors: 400 `Application is already withdrawn`, 400 `A rejected application cannot be withdrawn`, 403 `No permission` (someone else's), 404 `Application not found`, 409 `Application changed, try again` (the company changed the status at the same moment; reload and retry).
 
@@ -180,12 +180,68 @@ Errors:
 - A visitor who is not logged in also sees Apply; it goes to sign-in.
 - Message counters (decided 2026-11-09): the textarea always shows a word counter, "42 / 100 words", counted like the backend (trim, split on whitespace, empty text is 0). The textarea has a hard `maxLength={800}`. A character counter, "790 / 800 characters", appears only once the text passes about 700 characters, turns red at 800, and its space is reserved so the layout does not jump.
 - Show a disclaimer on the form when sending without a CV, without a cover letter or message, or with none of them.
+- Always show this note on the apply form (and in the card's confirm window): "Applying shares your email and phone number with this company, even if they are private on your profile." The vacancy's company sees the applicant's current email and phone in its applicant list whatever the profile switches say; no other company, user or admin sees them through applications.
 - On a reapply, show that this is a reapply after a withdraw or a reject (from `previousOutcome`) and that no attempts remain after it.
 - Withdraw asks first: "Withdraw and delete your CV and cover letter from this application?", with a warning that only one reapply is allowed.
 - Rate limit: apply and withdraw allow 5 requests a minute (429).
 
 Account deletion: deleting a user keeps their applications for the company as "Deleted user" with no name, files or message. Deleting a vacancy or a company deletes its applications.
 
+### My applications (role `user`)
+
+`GET /applications/mine?page=&take=&status=`: the user's own applications, newest `appliedAt` first. `status` filters by application status (any of the six). `take` defaults to 10, max 30. Response `{ items, total, page, take }`; each item is the apply response above plus:
+
+```
+{
+  ...apply response fields,
+  vacancy: { id, title, company, deadline, status } | null,
+  companyApproved,
+  canReapply
+}
+```
+
+- `vacancy.status` is `published`, `expired`, `closed` or `unavailable`. `unavailable` means the company edited the vacancy and it waits for admin review (or the edit was rejected); the details page answers 404 to users meanwhile. Show "Temporarily unavailable" and the title as plain text. Link the title to the vacancy only for `published`, `expired` and `closed`. The application itself always stays in the list and keeps its own status.
+- `vacancy` is `null` only if the vacancy was deleted during the request (its applications are deleted with it); skip such an item.
+- `companyApproved: false`: show the warning "This company currently has no approved status" and the company name as plain text (its public page answers 404).
+- `canReapply: true` shows the blue Reapply button on that item. It is true only when the application is `rejected` or `withdrawn`, it was the first submission, it is not locked, the vacancy is `published` and the company is approved.
+- Use skeleton loaders while the list loads.
+
+### Applicant list (role `company`)
+
+`GET /vacancies/:id/applications?page=&take=&status=&q=&sort=&focus=`: the applicants of one of the company's own vacancies. Only an approved company can use it (403 `Your company must be approved to manage applications`; the applications stay and show again after approval). 404 `Vacancy not found`, 403 `No permission` for another company's vacancy.
+- `status`: filter by application status.
+- `q`: name search, up to 64 characters (a search box above the list). Each typed word (at most 5) must start the first name or the last name, case ignored, in any order: "ana zu" finds Ana Zuri. Withdrawn and deleted-user rows never match, so they disappear while `q` is set. `total`, `sort` and `focus` all respect `q`; results keep the chosen `sort` (no match ranking). Send it after a short typing pause, and reset `page` to 1 when it changes.
+- `sort`: `-date` (default, newest `appliedAt` first), `date`, `name` (last name, then first name, A to Z, case ignored; a user without a last name sorts by first name), `-name`, `age` (youngest first), `-age` (oldest first). In the name and age sorts hidden rows go last; in the age sorts applicants without a birth date (Google sign-ups) come after those with one and before hidden rows.
+- `focus=<applicationId>`: returns the page that contains that application for the given `status` and `sort`, and `page` in the response is that page. Show it, scroll to the row with that `id` and highlight it. Use it when a notification opens an applicant. If the application is not in the filtered list, the requested `page` is returned as usual.
+
+Response `{ items, total, page, take }`. Two item shapes, told apart by `hidden`:
+
+```
+{
+  id, status, appliedAt, firstAppliedAt, hidden: false,
+  isReapply, previousOutcome, message, hasCv, hasCoverLetter,
+  applicant: { id, firstName, lastName, avatarUrl, email, phone, age }
+}
+{ id, status, appliedAt, hidden: true }
+```
+
+- `hidden: true` is a withdrawn application or a deleted user. Show only the status ("Withdrawn" or "Deleted user") and the time, no link, no files, no status controls. `id` is the application's id, for the row key and `focus`.
+- `isReapply` is true on a second submission; then show `previousOutcome` and the reapply time (`appliedAt`) as the main time and `firstAppliedAt` in a quieter style.
+- `age` is `null` for applicants without a birth date: show nothing. `avatarUrl` is `''` when none: show initials. Small square avatar.
+- `applicant.id` links to the public profile `GET /users/:id/public`. Application data (message, files, email, phone) is shown here whatever the user's profile switches say.
+- Use skeleton loaders while the list loads.
+
+### Status change (role `company`)
+
+`PATCH /applications/:id/status { status }`, `status` one of `viewed`, `interview`, `accepted`, `rejected`, in any order (a rejected application can be changed later). Approved company owning the vacancy only. Returns the visible applicant item (same shape as above). Errors: 404 `Application not found`, 403 `No permission`, 403 `Your company must be approved to manage applications`, 400 `A withdrawn application cannot be changed`, 400 `This applicant deleted their account` (status controls are hidden on hidden rows, so this only comes from a direct call), 409 `Application changed, try again` (the user withdrew at the same moment; reload).
+
+### Application files (roles `user` and `company`)
+
+`GET /applications/:id/cv` and `GET /applications/:id/cover-letter` return `{ url, expiresIn }`, a link valid 300 seconds, the same shape as `GET /users/:id/cv`. Allowed for the applicant and for the vacancy's approved company; everyone else, and any withdrawn application, deleted user or missing file, gets 404 `File not found`. Admins get 403. Show "CV" and "Cover letter" buttons only when `hasCv` / `hasCoverLetter` is true.
+- The PDF opens in the browser's PDF viewer; the viewer chooses whether to download it.
+- Call the route on every click and never store the link: after 5 minutes it answers an S3 "Access Denied" page (a download already started still finishes).
+- Open it in a new tab without being stopped by pop-up blockers: on click, open an empty tab first (`const tab = window.open('', '_blank')`), then set `tab.location.href = url` when the request answers, and close the tab if the request fails.
+
 ## Not built yet (do not build screens for these)
 
-Your applications list, applicant lists and status changes, application file links, Apply button states, saved jobs, chatbot, public company page, past vacancies section, a billing history list inside the site (use the portal), Stripe payments for anything except plans, vacancy submits and vacancy extensions.
+Apply button states on vacancy cards and the detail page, saved jobs, chatbot, public company page, past vacancies section, a billing history list inside the site (use the portal), Stripe payments for anything except plans, vacancy submits and vacancy extensions.
