@@ -29,7 +29,7 @@ import {
   VacancyRecord,
   VacancyStatus,
 } from '../vacancies/schema/vacancy.schema.js';
-import { vacancyViewStatus } from '../vacancies/vacancy-status.js';
+import { vacancyStatusForUser } from '../vacancies/vacancy-status.js';
 import {
   applicantAggregateOptions,
   applicantCountPipeline,
@@ -53,8 +53,6 @@ import {
   PreviousOutcome,
   WITHDRAWABLE_APPLICATION_STATUSES,
 } from './schema/application.schema.js';
-
-const UNAVAILABLE_VACANCY_STATUS = 'unavailable';
 
 export type ApplicationFileField = 'cvKey' | 'coverLetterKey';
 
@@ -662,23 +660,12 @@ export class ApplicationsService {
     return Math.floor(result.index / take) + 1;
   }
 
-  private vacancyStatusForUser(vacancy: VacancySummarySource) {
-    if (
-      vacancy.status === VacancyStatus.PENDING ||
-      vacancy.status === VacancyStatus.REJECTED
-    ) {
-      return UNAVAILABLE_VACANCY_STATUS;
-    }
-
-    return vacancyViewStatus(vacancy);
-  }
-
   private toMyApplicationResponse(
     application: ApplicationRecord,
     vacancy: VacancySummarySource | undefined,
     companyApproved: boolean,
   ) {
-    const vacancyStatus = vacancy ? this.vacancyStatusForUser(vacancy) : null;
+    const vacancyStatus = vacancy ? vacancyStatusForUser(vacancy) : null;
 
     return {
       ...this.toResponse(application),
