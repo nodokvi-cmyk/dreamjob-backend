@@ -30,6 +30,7 @@ import {
   VacancyPaymentPurpose,
 } from './schema/payment.schema.js';
 import { STRIPE_CLIENT } from './stripe-client.js';
+import { ensureStripeCustomer } from './stripe-customer.js';
 
 export type VacancyBillingResult =
   | { kind: 'done'; vacancy: VacancyRecord }
@@ -429,6 +430,11 @@ export class VacancyBillingService {
     );
     if (reusable) return reusable;
 
+    const customerId = await ensureStripeCustomer(
+      this.stripe,
+      this.companyModel,
+      company,
+    );
     const frontend = this.config.getOrThrow<string>('FRONTEND_URI');
     const metadata: Record<string, string> = {
       app: STRIPE_APP_TAG,
@@ -442,9 +448,11 @@ export class VacancyBillingService {
     const session = await this.stripe.checkout.sessions.create({
       mode: 'payment',
       client_reference_id: companyId,
-      ...(company.stripeCustomerId
-        ? { customer: company.stripeCustomerId }
-        : { customer_email: company.email }),
+      customer: customerId,
+      saved_payment_method_options: {
+        payment_method_save: 'enabled',
+        allow_redisplay_filters: ['always', 'limited', 'unspecified'],
+      },
       line_items: [
         {
           quantity: 1,
