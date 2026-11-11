@@ -58,13 +58,32 @@ export class BookmarksService {
       throw new NotFoundException('Vacancy not found');
     }
 
+    let created = true;
     try {
       await this.bookmarkModel.create({ user: userId, vacancy: vacancyId });
     } catch (error: unknown) {
       if (!isDuplicateKeyError(error)) throw error;
+      created = false;
     }
+    if (created) await this.removeIfOrphaned(vacancyId, userId);
 
     return { bookmarked: true as const };
+  }
+
+  private async removeIfOrphaned(
+    vacancyId: string,
+    userId: string,
+  ): Promise<void> {
+    const [vacancyExists, userExists] = await Promise.all([
+      this.vacancyModel.exists({ _id: vacancyId }),
+      this.userModel.exists({ _id: userId }),
+    ]);
+    if (vacancyExists && userExists) return;
+
+    await this.bookmarkModel.deleteOne({ user: userId, vacancy: vacancyId });
+    throw new NotFoundException(
+      vacancyExists ? 'User not found' : 'Vacancy not found',
+    );
   }
 
   async remove(vacancyId: string, userId: string) {
