@@ -10,10 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import Stripe from 'stripe';
-import {
-  Company,
-  CompanyDocument,
-} from '../companies/schema/company.schema.js';
+import { Company } from '../companies/schema/company.schema.js';
 import { EmailSenderService } from '../email-sender/email-sender.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { NotificationType } from '../notifications/schema/notification.schema.js';
@@ -31,6 +28,7 @@ import {
 } from './plan-settings.js';
 import { Payment, PaymentKind } from './schema/payment.schema.js';
 import { STRIPE_CLIENT } from './stripe-client.js';
+import { ensureStripeCustomer } from './stripe-customer.js';
 import { VacancyBillingService } from './vacancy-billing.service.js';
 
 function idOf(value: string | { id: string } | null | undefined) {
@@ -65,7 +63,11 @@ export class PaymentService {
       );
     }
 
-    const customerId = await this.ensureCustomer(company);
+    const customerId = await ensureStripeCustomer(
+      this.stripe,
+      this.companyModel,
+      company,
+    );
     const frontend = this.config.getOrThrow<string>('FRONTEND_URI');
     const metadata = { app: STRIPE_APP_TAG, companyId, plan };
 
@@ -196,30 +198,6 @@ export class PaymentService {
       );
       throw new NotFoundException('Checkout session not found');
     }
-  }
-
-  private async ensureCustomer(company: CompanyDocument) {
-    if (company.stripeCustomerId) return company.stripeCustomerId;
-
-    const customer = await this.stripe.customers.create({
-      email: company.email,
-      name: company.companyName || undefined,
-      metadata: { app: STRIPE_APP_TAG, companyId: company.id },
-    });
-
-    const saved = await this.companyModel
-      .findOneAndUpdate(
-        { _id: company._id, stripeCustomerId: { $exists: false } },
-        { $set: { stripeCustomerId: customer.id } },
-        { new: true },
-      )
-      .select('+stripeCustomerId');
-    if (saved?.stripeCustomerId) return saved.stripeCustomerId;
-
-    const current = await this.companyModel
-      .findById(company._id)
-      .select('+stripeCustomerId');
-    return current?.stripeCustomerId ?? customer.id;
   }
 
   private async fulfillSession(session: Stripe.Checkout.Session) {
