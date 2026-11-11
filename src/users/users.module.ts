@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ApplicationsModule } from '../applications/applications.module.js';
 import { AwsS3Module } from '../aws-s3/aws-s3.module.js';
+import { BookmarksModule } from '../bookmarks/bookmarks.module.js';
 import { CompaniesModule } from '../companies/companies.module.js';
 import { EmailClaimsModule } from '../email-claims/email-claims.module.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
@@ -16,6 +17,7 @@ import { User, userSchema } from './schema/user.schema.js';
     AwsS3Module,
     CompaniesModule,
     ApplicationsModule,
+    BookmarksModule,
     NotificationsModule,
   ],
   controllers: [UsersController],

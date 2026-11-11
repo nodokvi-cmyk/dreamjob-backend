@@ -14,6 +14,7 @@ import {
   processImage,
 } from '../aws-s3/process-image.js';
 import { StoragePrefix } from '../aws-s3/storage-prefix.js';
+import { BookmarksService } from '../bookmarks/bookmarks.service.js';
 import { CompaniesService } from '../companies/companies.service.js';
 import { EmailClaimsService } from '../email-claims/email-claims.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
@@ -37,6 +38,7 @@ export class UsersService implements EmailChangeStore {
     private readonly s3: AwsS3Service,
     private readonly companiesService: CompaniesService,
     private readonly applications: ApplicationsService,
+    private readonly bookmarks: BookmarksService,
     private readonly notifications: NotificationsService,
   ) {}
 
@@ -461,6 +463,7 @@ export class UsersService implements EmailChangeStore {
 
     await this.emailClaims.releaseAll(id);
     await this.applications.detachUser(id);
+    await this.bookmarks.removeForUser(id);
     await this.notifications.removeForRecipient(id, AuthRole.USER);
     await Promise.all([
       this.s3.deleteQuietly(user.avatarKey),
