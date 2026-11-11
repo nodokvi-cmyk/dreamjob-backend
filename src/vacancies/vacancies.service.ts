@@ -19,6 +19,8 @@ import {
 } from '../aws-s3/process-image.js';
 import { StoragePrefix } from '../aws-s3/storage-prefix.js';
 import { Company } from '../companies/schema/company.schema.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
+import { NotificationType } from '../notifications/schema/notification.schema.js';
 import {
   VacancyBillingResult,
   VacancyBillingService,
@@ -126,6 +128,7 @@ export class VacanciesService {
     private readonly s3: AwsS3Service,
     private readonly billing: VacancyBillingService,
     private readonly applications: ApplicationsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   toResponse(vacancy: VacancyRecord, includePrivate: boolean) {
@@ -396,6 +399,16 @@ export class VacanciesService {
       .lean<VacancyRecord>();
     if (!approved) throw new ConflictException('Vacancy changed, try again');
 
+    await this.notifications.notify(
+      approved.company.toString(),
+      AuthRole.COMPANY,
+      {
+        type: NotificationType.VACANCY_APPROVED,
+        data: { vacancyTitle: approved.title },
+        target: { vacancyId: approved._id.toString() },
+      },
+    );
+
     return this.toResponse(approved, true);
   }
 
@@ -441,6 +454,21 @@ export class VacanciesService {
           .findOneAndUpdate(filter, update, { returnDocument: 'after' })
           .lean<VacancyRecord>();
     if (!rejected) throw new ConflictException('Vacancy changed, try again');
+
+    await this.notifications.notify(
+      rejected.company.toString(),
+      AuthRole.COMPANY,
+      {
+        type: NotificationType.VACANCY_REJECTED,
+        data: {
+          vacancyTitle: rejected.title,
+          ...(rejected.rejectionReason
+            ? { reason: rejected.rejectionReason }
+            : {}),
+        },
+        target: { vacancyId: rejected._id.toString() },
+      },
+    );
 
     return this.toResponse(rejected, true);
   }
