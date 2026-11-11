@@ -13,9 +13,11 @@ import {
 } from '../aws-s3/process-image.js';
 import { StoragePrefix } from '../aws-s3/storage-prefix.js';
 import { EmailClaimsService } from '../email-claims/email-claims.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { hashChangedPassword } from '../shared/crypto/change-password.js';
 import { ChangePasswordDto } from '../shared/dto/change-password.dto.js';
 import { PaginationDto } from '../shared/dto/pagination.dto.js';
+import { AuthRole } from '../shared/types/auth-role.js';
 import { BillingPlan } from '../shared/types/billing-plan.js';
 import type { EmailChangeStore } from '../shared/types/email-change-store.js';
 import { otpAttemptsLeftFilter } from '../shared/crypto/otp-attempts.js';
@@ -44,6 +46,7 @@ export class CompaniesService implements EmailChangeStore {
     private readonly emailClaims: EmailClaimsService,
     private readonly s3: AwsS3Service,
     private readonly vacancies: VacanciesService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   toResponse(company: CompanyDocument) {
@@ -407,6 +410,7 @@ export class CompaniesService implements EmailChangeStore {
     if (!company) throw new NotFoundException('Company not found');
 
     await this.emailClaims.releaseAll(id);
+    await this.notifications.removeForRecipient(id, AuthRole.COMPANY);
     await this.s3.deleteQuietly(company.logoKey);
 
     return company;

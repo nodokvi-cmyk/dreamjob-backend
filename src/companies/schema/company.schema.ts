@@ -70,6 +70,9 @@ export class Company {
   })
   pendingEmail?: string;
 
+  @Prop({ type: Date, required: false, select: false })
+  notificationsSeenAt?: Date;
+
   @Prop({ type: String, default: '', trim: true, maxlength: 32 })
   phone!: string;
 
