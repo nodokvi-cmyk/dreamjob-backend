@@ -11,6 +11,7 @@ export enum NotificationType {
   COMPANY_APPROVED = 'companyApproved',
   COMPANY_REVOKED = 'companyRevoked',
   PLAN_ENDED = 'planEnded',
+  PLAN_PAYMENT_ACTION_REQUIRED = 'planPaymentActionRequired',
   APPLICATION_STATUS_CHANGED = 'applicationStatusChanged',
   APPLICANT_COMPANY_REVOKED = 'applicantCompanyRevoked',
 }
