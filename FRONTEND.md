@@ -266,7 +266,7 @@ A bell in the header for users and companies. Admins get 403 on every route. No 
 - `data`: a snapshot taken when the notification was made, so it stays readable after the vacancy or company changes or is deleted. Only the fields a type needs are present: `vacancyTitle`, `companyName`, `status`, `reason`, `planName`, `isReapply`. `{}` when none.
 - `target`: `{ vacancyId, applicationId }`, each a string or `null`. The target may be deleted by now; a 404 when opening it is normal.
 
-**Badge.** Red circle on the bell with `unseenCount`: notifications created since the bell was last opened. The number is capped at 100, so show `99+` when it is above 99, and hide the circle at 0. Call `GET /notifications/badge` on page load and refresh it every minute or so. When the user opens the bell, call `PATCH /notifications/seen` and hide the circle. The badge has nothing to do with read state.
+**Badge.** Red circle on the bell with `unseenCount`: notifications created since the bell was last opened. The number is capped at 100, so show `99+` when it is above 99, and hide the circle at 0. Call `GET /notifications/badge` on page load and refresh it every 5 minutes, only while the browser tab is visible (every call is a backend function run, so do not poll faster). When the user opens the bell, call `PATCH /notifications/seen` and hide the circle. The badge has nothing to do with read state.
 
 **Panel.** Opens in the page (not a new page or tab) and loads `GET /notifications?take=5&page=N`; pages change inside the panel. Unread items (`read: false`) are bold, read ones normal. A click calls `PATCH /notifications/:id/read`, then opens the target. `unreadCount` is there if you want to show it. Use skeleton loaders while it loads.
 
