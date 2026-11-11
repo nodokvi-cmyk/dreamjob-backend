@@ -12,6 +12,21 @@ export function isNotSubmitted(
   return vacancy.status === VacancyStatus.PENDING && !vacancy.submittedAt;
 }
 
+export const UNAVAILABLE_VACANCY_STATUS = 'unavailable';
+
+export function vacancyStatusForUser(
+  vacancy: Pick<Vacancy, 'status' | 'deadline' | 'submittedAt'>,
+) {
+  if (
+    vacancy.status === VacancyStatus.PENDING ||
+    vacancy.status === VacancyStatus.REJECTED
+  ) {
+    return UNAVAILABLE_VACANCY_STATUS;
+  }
+
+  return vacancyViewStatus(vacancy);
+}
+
 export function vacancyViewStatus(
   vacancy: Pick<Vacancy, 'status' | 'deadline' | 'submittedAt'>,
 ): VacancyViewStatus {
