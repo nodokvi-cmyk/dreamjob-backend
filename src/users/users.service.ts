@@ -16,6 +16,7 @@ import {
 import { StoragePrefix } from '../aws-s3/storage-prefix.js';
 import { CompaniesService } from '../companies/companies.service.js';
 import { EmailClaimsService } from '../email-claims/email-claims.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { hashChangedPassword } from '../shared/crypto/change-password.js';
 import { ChangePasswordDto } from '../shared/dto/change-password.dto.js';
 import { PaginationDto } from '../shared/dto/pagination.dto.js';
@@ -36,6 +37,7 @@ export class UsersService implements EmailChangeStore {
     private readonly s3: AwsS3Service,
     private readonly companiesService: CompaniesService,
     private readonly applications: ApplicationsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   toResponse(user: UserDocument) {
@@ -459,6 +461,7 @@ export class UsersService implements EmailChangeStore {
 
     await this.emailClaims.releaseAll(id);
     await this.applications.detachUser(id);
+    await this.notifications.removeForRecipient(id, AuthRole.USER);
     await Promise.all([
       this.s3.deleteQuietly(user.avatarKey),
       this.s3.deleteQuietly(user.cvKey),

@@ -69,6 +69,9 @@ export class User {
   })
   pendingEmail?: string;
 
+  @Prop({ type: Date, required: false, select: false })
+  notificationsSeenAt?: Date;
+
   @Prop({ type: String, default: '' })
   avatarKey!: string;
 

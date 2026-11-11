@@ -4,6 +4,7 @@ import { ApplicationsModule } from '../applications/applications.module.js';
 import { AwsS3Module } from '../aws-s3/aws-s3.module.js';
 import { CompaniesModule } from '../companies/companies.module.js';
 import { EmailClaimsModule } from '../email-claims/email-claims.module.js';
+import { NotificationsModule } from '../notifications/notifications.module.js';
 import { UsersService } from './users.service.js';
 import { UsersController } from './users.controller.js';
 import { User, userSchema } from './schema/user.schema.js';
@@ -15,6 +16,7 @@ import { User, userSchema } from './schema/user.schema.js';
     AwsS3Module,
     CompaniesModule,
     ApplicationsModule,
+    NotificationsModule,
   ],
   controllers: [UsersController],
   providers: [UsersService],
