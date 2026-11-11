@@ -247,6 +247,39 @@ Response `{ items, total, page, take }`. Two item shapes, told apart by `hidden`
 - Call the route on every click and never store the link: after 5 minutes it answers an S3 "Access Denied" page (a download already started still finishes).
 - Open it in a new tab without being stopped by pop-up blockers: on click, open an empty tab first (`const tab = window.open('', '_blank')`), then set `tab.location.href = url` when the request answers, and close the tab if the request fails.
 
+## Notifications (roles `user` and `company`, `/notifications`)
+
+A bell in the header for users and companies. Admins get 403 on every route. No event creates notifications yet: the routes work and the list stays empty until the next backend release wires the events. Build the bell and the panel now.
+
+| Route | Body / query | Returns |
+|---|---|---|
+| `GET /notifications/badge` | none | `{ unseenCount }` |
+| `PATCH /notifications/seen` | none | `{ unseenCount: 0 }` |
+| `GET /notifications` | `page`, `take` (use `take=5`) | `{ items, total, page, take, unreadCount }`, newest first |
+| `PATCH /notifications/:id/read` | none | the notification |
+| `PATCH /notifications/:id/lock` | `{ locked: true \| false }` | the notification |
+| `DELETE /notifications/:id` | none | the deleted notification |
+| `DELETE /notifications` | none | `{ deleted }` (number removed) |
+
+**Item:** `{ id, type, read, createdAt, data, target, locked, expiresAt, lockedAt, daysLeft, hoursLeft }`.
+- `type`: `newApplication`, `applicationWithdrawn`, `vacancyApproved`, `vacancyRejected`, `companyApproved`, `companyRevoked`, `planEnded` (companies); `applicationStatusChanged`, `applicantCompanyRevoked` (users). Build the sentence from `type` and `data`; the click targets per type come with the next release.
+- `data`: a snapshot taken when the notification was made, so it stays readable after the vacancy or company changes or is deleted. Only the fields a type needs are present: `vacancyTitle`, `companyName`, `status`, `reason`, `planName`, `isReapply`. `{}` when none.
+- `target`: `{ vacancyId, applicationId }`, each a string or `null`. The target may be deleted by now; a 404 when opening it is normal.
+
+**Badge.** Red circle on the bell with `unseenCount`: notifications created since the bell was last opened. The number is capped at 100, so show `99+` when it is above 99, and hide the circle at 0. Call `GET /notifications/badge` on page load and refresh it every minute or so. When the user opens the bell, call `PATCH /notifications/seen` and hide the circle. The badge has nothing to do with read state.
+
+**Panel.** Opens in the page (not a new page or tab) and loads `GET /notifications?take=5&page=N`; pages change inside the panel. Unread items (`read: false`) are bold, read ones normal. A click calls `PATCH /notifications/:id/read`, then opens the target. `unreadCount` is there if you want to show it. Use skeleton loaders while it loads.
+
+**Lifetime and lock.** Every notification is deleted automatically 30 days after it was created. The lock icon is one toggle button: send `{ locked: !item.locked }` and replace the item with the answer. Locking freezes the countdown; unlocking resumes it with the time that was left (locked with 1 day left, unlocked a week later: deleted 1 day after unlocking). Sending the state it already has changes nothing.
+- Show the countdown from the backend values, never compute dates yourself.
+- Unlocked (`locked: false`): `expiresAt` is set, `lockedAt` is `null`. Show "Deleted in N days" from `daysLeft`; when `daysLeft` is 0, show "Deleted in N hours" from `hoursLeft`. You may also show the date from `expiresAt`.
+- Locked (`locked: true`): `expiresAt` is `null`, `lockedAt` is the time it was locked. Show "Frozen, N days left" (`daysLeft`, or hours from `hoursLeft` when 0) and "locked since <lockedAt>".
+- `hoursLeft` is `null` whenever `daysLeft` is 1 or more.
+
+**Deleting.** The X on an unlocked notification calls `DELETE /notifications/:id` at once. The X on a locked one first asks "Delete this locked notification?" and deletes only after confirming. "Clear all" calls `DELETE /notifications`, which skips locked notifications; reload the panel afterwards.
+
+**Errors.** 404 `Notification not found` (wrong id, another account's notification, or already deleted), 409 `Notification changed, try again` on lock when another tab changed it at the same moment (reload), 400 when `locked` is missing or not a boolean.
+
 ## Not built yet (do not build screens for these)
 
 Apply button states on vacancy cards and the detail page, saved jobs, chatbot, public company page, past vacancies section, a billing history list inside the site (use the portal), Stripe payments for anything except plans, vacancy submits and vacancy extensions.
