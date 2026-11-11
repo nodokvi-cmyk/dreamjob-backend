@@ -272,9 +272,10 @@ A bell in the header for users and companies. Admins get 403 on every route. No 
 
 **Lifetime and lock.** Every notification is deleted automatically 30 days after it was created. The lock icon is one toggle button: send `{ locked: !item.locked }` and replace the item with the answer. Locking freezes the countdown; unlocking resumes it with the time that was left (locked with 1 day left, unlocked a week later: deleted 1 day after unlocking). Sending the state it already has changes nothing.
 - Show the countdown from the backend values, never compute dates yourself.
-- Unlocked (`locked: false`): `expiresAt` is set, `lockedAt` is `null`. Show "Deleted in N days" from `daysLeft`; when `daysLeft` is 0, show "Deleted in N hours" from `hoursLeft`. You may also show the date from `expiresAt`.
-- Locked (`locked: true`): `expiresAt` is `null`, `lockedAt` is the time it was locked. Show "Frozen, N days left" (`daysLeft`, or hours from `hoursLeft` when 0) and "locked since <lockedAt>".
-- `hoursLeft` is `null` whenever `daysLeft` is 1 or more.
+- Do not print the countdown as a text line on every notification. Show a small warning icon on each one; on hover (desktop) or tap (phones) it opens a tooltip with the countdown text below, and for an unlocked notification a hint that the lock icon keeps it. The icon needs its own tap target, so tapping it does not open the notification.
+- Unlocked (`locked: false`): `expiresAt` is set, `lockedAt` is `null`. Show "Deleted in N days" from `daysLeft`; when `daysLeft` is 0, show "Deleted in N hours" from `hoursLeft`, or "Deleted in less than an hour" when `hoursLeft` is 0. You may also show the date from `expiresAt`.
+- Locked (`locked: true`): `expiresAt` is `null`, `lockedAt` is the time it was locked. Show "Frozen, N days left" (`daysLeft`, or hours from `hoursLeft` when `daysLeft` is 0, or "less than an hour left" when `hoursLeft` is 0) and "locked since <lockedAt>".
+- `daysLeft` rounds up (a new notification shows 30). `hoursLeft` is `null` whenever `daysLeft` is 1 or more; under one day it is a whole number of hours rounded down, so `0` means under an hour. Check `hoursLeft !== null`, not whether it is truthy.
 
 **Deleting.** The X on an unlocked notification calls `DELETE /notifications/:id` at once. The X on a locked one first asks "Delete this locked notification?" and deletes only after confirming. "Clear all" calls `DELETE /notifications`, which skips locked notifications; reload the panel afterwards.
 
