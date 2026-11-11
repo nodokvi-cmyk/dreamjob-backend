@@ -18,6 +18,7 @@ import {
   processImage,
 } from '../aws-s3/process-image.js';
 import { StoragePrefix } from '../aws-s3/storage-prefix.js';
+import { BookmarksService } from '../bookmarks/bookmarks.service.js';
 import { Company } from '../companies/schema/company.schema.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { NotificationType } from '../notifications/schema/notification.schema.js';
@@ -128,6 +129,7 @@ export class VacanciesService {
     private readonly s3: AwsS3Service,
     private readonly billing: VacancyBillingService,
     private readonly applications: ApplicationsService,
+    private readonly bookmarks: BookmarksService,
     private readonly notifications: NotificationsService,
   ) {}
 
@@ -588,6 +590,7 @@ export class VacanciesService {
       await this.vacancyModel.deleteOne({ _id: id });
     }
     await this.applications.removeForVacancies([vacancy._id]);
+    await this.bookmarks.removeForVacancies([vacancy._id]);
     await this.deleteFiles(vacancy.photoKeys);
 
     return this.toResponse(vacancy, true);
@@ -605,7 +608,9 @@ export class VacanciesService {
       ),
     );
     await this.vacancyModel.deleteMany({ company: companyId });
-    await this.applications.removeForVacancies(vacancies.map(({ _id }) => _id));
+    const vacancyIds = vacancies.map(({ _id }) => _id);
+    await this.applications.removeForVacancies(vacancyIds);
+    await this.bookmarks.removeForVacancies(vacancyIds);
     await this.deleteFiles(vacancies.flatMap(({ photoKeys }) => photoKeys));
   }
 
