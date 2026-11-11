@@ -249,7 +249,7 @@ Response `{ items, total, page, take }`. Two item shapes, told apart by `hidden`
 
 ## Notifications (roles `user` and `company`, `/notifications`)
 
-A bell in the header for users and companies. Admins get 403 on every route. No event creates notifications yet: the routes work and the list stays empty until the next backend release wires the events. Build the bell and the panel now.
+A bell in the header for users and companies. Admins get 403 on every route. The backend creates notifications by itself when the events below happen; the frontend only reads and manages them.
 
 | Route | Body / query | Returns |
 |---|---|---|
@@ -262,9 +262,40 @@ A bell in the header for users and companies. Admins get 403 on every route. No 
 | `DELETE /notifications` | none | `{ deleted }` (number removed) |
 
 **Item:** `{ id, type, read, createdAt, data, target, locked, expiresAt, lockedAt, daysLeft, hoursLeft }`.
-- `type`: `newApplication`, `applicationWithdrawn`, `vacancyApproved`, `vacancyRejected`, `companyApproved`, `companyRevoked`, `planEnded` (companies); `applicationStatusChanged`, `applicantCompanyRevoked` (users). Build the sentence from `type` and `data`; the click targets per type come with the next release.
+- `type`: one of the nine below. Build the sentence from `type` and `data`.
 - `data`: a snapshot taken when the notification was made, so it stays readable after the vacancy or company changes or is deleted. Only the fields a type needs are present: `vacancyTitle`, `companyName`, `status`, `reason`, `planName`, `isReapply`. `{}` when none.
-- `target`: `{ vacancyId, applicationId }`, each a string or `null`. The target may be deleted by now; a 404 when opening it is normal.
+- `target`: `{ vacancyId, applicationId }`, each a string or `null`. The target may be deleted by now; a 404 when opening it is normal (show a short "This item no longer exists" message).
+
+**Types.** Who gets it, when, which fields are present, and where a click goes. The suggested sentences are examples; keep them short.
+
+| `type` | Recipient | When | `data` | `target` | Click opens | Example sentence |
+|---|---|---|---|---|---|---|
+| `newApplication` | company | a user applies or reapplies to one of its vacancies | `vacancyTitle`, `isReapply` | `vacancyId`, `applicationId` | the vacancy's applicant list with `focus=<applicationId>`: jump to the page it returns, scroll to the row and highlight it | "New application for Frontend Developer" / "New reapplication for ..." when `isReapply` |
+| `applicationWithdrawn` | company | a user withdraws an application to its vacancy | `vacancyTitle` | `vacancyId`, `applicationId` | the same applicant list with `focus` (the row is now a hidden withdrawn row) | "An applicant withdrew from Frontend Developer" |
+| `vacancyApproved` | company | an admin approves its vacancy | `vacancyTitle` | `vacancyId` | the company's vacancy detail | "Frontend Developer is published" |
+| `vacancyRejected` | company | an admin rejects its vacancy | `vacancyTitle`, `reason` (only when the admin gave one) | `vacancyId` | the company's vacancy detail | "Frontend Developer was not approved: <reason>" |
+| `companyApproved` | company | an admin approves the company | `companyName` | none | the company dashboard | "Your company is approved" |
+| `companyRevoked` | company | an admin revokes the company's approval | `companyName` | none | the company dashboard | "Your company approval was revoked" |
+| `planEnded` | company | a paid plan ends: a failed renewal or a cancellation that reached its end date | `planName` | none | `/company/billing` | "Your Plus plan has ended" |
+| `applicationStatusChanged` | user | a company moves the user's application to `interview`, `accepted` or `rejected` (never for `viewed`) | `vacancyTitle`, `companyName`, `status` | `vacancyId`, `applicationId` | the vacancy detail (`/vacancies/:vacancyId`); once a "My applications" page exists, that page with the application highlighted | "Acme moved your application for Frontend Developer to interview" |
+| `applicantCompanyRevoked` | user | an admin revokes a company the user has an active (not withdrawn) application with; one notice per revoke, however many of its vacancies the user applied to | `companyName` | none | "My applications" when that page exists, otherwise nothing (mark read only) | "Acme is no longer approved; your applications to it are on hold" |
+
+Approving an already approved company or revoking an already revoked one creates nothing. A company approved, revoked, approved and revoked again gets a notice each time.
+
+**Tone, color and icon.** Show importance with three tones, not a color per type, and keep the panel calm:
+- Color only on a small icon and a thin left border of the item. Text and background stay the normal theme colors.
+- No red inside the panel: red belongs to the badge. Amber is the strongest tone.
+- Read state is separate: unread bold, read normal, in every tone.
+
+| Tone | Color | Types |
+|---|---|---|
+| Positive | green | `vacancyApproved`, `companyApproved`, `applicationStatusChanged` with `status` `interview` or `accepted` |
+| Needs attention | amber | `vacancyRejected`, `companyRevoked`, `planEnded`, `applicantCompanyRevoked`, `applicationStatusChanged` with `status` `rejected` |
+| Info | neutral (the theme's muted color) | `newApplication`, `applicationWithdrawn` |
+
+Each type also gets its own icon shape, so items differ even within one tone (lucide names): `newApplication` inbox, `applicationWithdrawn` undo, `vacancyApproved` and `companyApproved` check, `vacancyRejected` x, `companyRevoked` and `applicantCompanyRevoked` shield-off, `planEnded` credit-card, `applicationStatusChanged` calendar for `interview`, check for `accepted`, x for `rejected`.
+
+**Emails.** Some events also send an email; the bell notification is created either way. Emailed: `vacancyApproved`, `vacancyRejected`, `companyApproved`, `companyRevoked`, `applicationStatusChanged`, and `planEnded` only after a failed renewal (a cancellation the company chose gets the bell only). Not emailed: `newApplication`, `applicationWithdrawn`, `applicantCompanyRevoked`. The email buttons link to these frontend pages, so keep them working: `/dashboard` (company approved or revoked), `/dashboard/vacancies/:id` (vacancy approved or rejected), `/vacancies/:id` (application status), `/company/billing` (plan ended).
 
 **Badge.** Red circle on the bell with `unseenCount`: notifications created since the bell was last opened. The number is capped at 100, so show `99+` when it is above 99, and hide the circle at 0. Call `GET /notifications/badge` on page load and refresh it every 5 minutes, only while the browser tab is visible (every call is a backend function run, so do not poll faster). When the user opens the bell, call `PATCH /notifications/seen` and hide the circle. The badge has nothing to do with read state.
 
