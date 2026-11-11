@@ -4,6 +4,7 @@ import { Model, Types } from 'mongoose';
 import { Company } from '../companies/schema/company.schema.js';
 import type { PaginationDto } from '../shared/dto/pagination.dto.js';
 import { isDuplicateKeyError } from '../shared/mongo/is-duplicate-key-error.js';
+import { User } from '../users/schema/user.schema.js';
 import {
   Vacancy,
   VacancyRecord,
@@ -38,9 +39,13 @@ export class BookmarksService {
     @InjectModel(Bookmark.name) private readonly bookmarkModel: Model<Bookmark>,
     @InjectModel(Vacancy.name) private readonly vacancyModel: Model<Vacancy>,
     @InjectModel(Company.name) private readonly companyModel: Model<Company>,
+    @InjectModel(User.name) private readonly userModel: Model<User>,
   ) {}
 
   async add(vacancyId: string, userId: string) {
+    const userExists = await this.userModel.exists({ _id: userId });
+    if (!userExists) throw new NotFoundException('User not found');
+
     const vacancy = await this.vacancyModel
       .findById(vacancyId)
       .select('status')
