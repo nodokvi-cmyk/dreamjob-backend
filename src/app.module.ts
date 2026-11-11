@@ -10,6 +10,7 @@ import { AuthModule } from './auth/auth.module.js';
 import { EmailChangeModule } from './email-change/email-change.module.js';
 import { CompaniesModule } from './companies/companies.module.js';
 import { validateEnv } from './config/env.validation.js';
+import { NotificationsModule } from './notifications/notifications.module.js';
 import { PaymentModule } from './payment/payment.module.js';
 import { RateLimitGuard } from './shared/throttle/rate-limit.guard.js';
 import { UsersModule } from './users/users.module.js';
@@ -39,6 +40,7 @@ import { VacanciesModule } from './vacancies/vacancies.module.js';
     AuthModule,
     EmailChangeModule,
     PaymentModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: RateLimitGuard }],
