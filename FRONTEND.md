@@ -314,6 +314,31 @@ Each type also gets its own icon shape, so items differ even within one tone (lu
 
 **Errors.** 404 `Notification not found` (wrong id, another account's notification, or already deleted), 409 `Notification changed, try again` on lock when another tab changed it at the same moment (reload), 400 when `locked` is missing or not a boolean.
 
+## Bookmarks (role `user`, saved vacancies)
+
+Only users bookmark; companies and admins get 403 on all three routes.
+
+- `POST /vacancies/:id/bookmark`: adds. No body. Answers `{ bookmarked: true }`. Sending it again changes nothing and answers the same, so a double click is safe. 404 `Vacancy not found` unless the vacancy is `published` and not expired (drafts, pending, rejected, closed and expired ones cannot be bookmarked).
+- `DELETE /vacancies/:id/bookmark`: removes. Answers `{ bookmarked: false }` whether or not it was bookmarked. Works for any vacancy id, so an unavailable vacancy can still be removed from the list.
+- `GET /bookmarks?page=&take=`: the user's bookmarks, newest bookmark first. `take` defaults to 10, max 30. Answers `{ items, total, page, take }`.
+
+```
+{
+  id,
+  createdAt,
+  vacancy: { id, title, category, employmentType, workMode, location, salaryMin, salaryMax, currency, deadline, company, status } | null,
+  companyApproved
+}
+```
+
+- `id` is the bookmark id; use `vacancy.id` for the remove call and for links.
+- `vacancy.status` is `published`, `expired`, `closed` or `unavailable`. `unavailable` means the company edited the vacancy and it waits for admin review (or the edit was rejected); the details page answers 404 to users meanwhile. Show "Temporarily unavailable" and the title as plain text, with the remove button. Link the title only for `published`, `expired` and `closed`. Bookmarks of unavailable, closed and expired vacancies stay in the list until the user removes them.
+- `salaryMin` and `salaryMax` are `null` when not set.
+- `vacancy` is `null` only if the vacancy was deleted during the request (bookmarks are deleted with it); skip such an item.
+- `companyApproved: false`: show the warning "This company currently has no approved status" and the company name as plain text (its public page answers 404).
+- Deleting the user account deletes the bookmarks. This list is a simple summary; the shared light card shape comes later with the vacancy response change.
+- Use skeleton loaders while the list loads.
+
 ## Not built yet (do not build screens for these)
 
-Apply button states on vacancy cards and the detail page, saved jobs, chatbot, public company page, past vacancies section, a billing history list inside the site (use the portal), Stripe payments for anything except plans, vacancy submits and vacancy extensions.
+Apply button states on vacancy cards and the detail page, bookmark hearts on vacancy cards and the detail page (the bookmark routes and page exist, `isBookmarked` on cards comes later), chatbot, public company page, past vacancies section, a billing history list inside the site (use the portal), Stripe payments for anything except plans, vacancy submits and vacancy extensions.

@@ -7,6 +7,7 @@ import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { ApplicationsModule } from './applications/applications.module.js';
 import { AuthModule } from './auth/auth.module.js';
+import { BookmarksModule } from './bookmarks/bookmarks.module.js';
 import { EmailChangeModule } from './email-change/email-change.module.js';
 import { CompaniesModule } from './companies/companies.module.js';
 import { validateEnv } from './config/env.validation.js';
@@ -37,6 +38,7 @@ import { VacanciesModule } from './vacancies/vacancies.module.js';
     CompaniesModule,
     VacanciesModule,
     ApplicationsModule,
+    BookmarksModule,
     AuthModule,
     EmailChangeModule,
     PaymentModule,
