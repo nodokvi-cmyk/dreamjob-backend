@@ -15,6 +15,9 @@ import {
   CompanyDocument,
 } from '../companies/schema/company.schema.js';
 import { EmailSenderService } from '../email-sender/email-sender.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
+import { NotificationType } from '../notifications/schema/notification.schema.js';
+import { AuthRole } from '../shared/types/auth-role.js';
 import { BillingPlan } from '../shared/types/billing-plan.js';
 import { claimPayment } from './claim-payment.js';
 import {
@@ -44,6 +47,7 @@ export class PaymentService {
     private readonly config: ConfigService,
     private readonly emailSender: EmailSenderService,
     private readonly vacancyBilling: VacancyBillingService,
+    private readonly notifications: NotificationsService,
     @InjectModel(Company.name)
     private readonly companyModel: Model<Company>,
     @InjectModel(Payment.name)
@@ -376,6 +380,11 @@ export class PaymentService {
       metadata: { [PLAN_END_REASON_KEY]: PLAN_END_AUTHENTICATION },
     });
 
+    await this.notifications.notify(company.id, AuthRole.COMPANY, {
+      type: NotificationType.PLAN_PAYMENT_ACTION_REQUIRED,
+      data: { planName: PLAN_SETTINGS[plan].label },
+    });
+
     if (!invoice.hosted_invoice_url) return;
 
     try {
@@ -413,7 +422,8 @@ export class PaymentService {
     }
 
     await this.voidInvoiceQuietly(invoice.id);
-    await this.resetToFreePlan(subscriptionId);
+    const previous = await this.resetToFreePlan(subscriptionId);
+    if (previous) await this.notifyPlanEnded(previous._id.toString(), plan);
     await this.sendPlanEndedQuietly(company.email, plan);
   }
 
@@ -421,6 +431,9 @@ export class PaymentService {
     if (subscription.metadata.app !== STRIPE_APP_TAG) return;
 
     const previous = await this.resetToFreePlan(subscription.id);
+    if (previous && isPaidPlan(previous.plan)) {
+      await this.notifyPlanEnded(previous._id.toString(), previous.plan);
+    }
     if (
       subscription.metadata[PLAN_END_REASON_KEY] !== PLAN_END_AUTHENTICATION
     ) {
@@ -443,6 +456,13 @@ export class PaymentService {
         error instanceof Error ? error.message : 'Could not void invoice',
       );
     }
+  }
+
+  private notifyPlanEnded(companyId: string, plan: PaidPlan) {
+    return this.notifications.notify(companyId, AuthRole.COMPANY, {
+      type: NotificationType.PLAN_ENDED,
+      data: { planName: PLAN_SETTINGS[plan].label },
+    });
   }
 
   private async sendPlanEndedQuietly(email: string, plan: PaidPlan) {

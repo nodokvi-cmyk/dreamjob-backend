@@ -4,6 +4,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import Stripe from 'stripe';
 import { Company, companySchema } from '../companies/schema/company.schema.js';
 import { EmailSenderModule } from '../email-sender/email-sender.module.js';
+import { NotificationsModule } from '../notifications/notifications.module.js';
 import { Vacancy, vacancySchema } from '../vacancies/schema/vacancy.schema.js';
 import { PaymentController } from './payment.controller.js';
 import { PaymentService } from './payment.service.js';
@@ -19,6 +20,7 @@ import { VacancyBillingService } from './vacancy-billing.service.js';
       { name: Vacancy.name, schema: vacancySchema },
     ]),
     EmailSenderModule,
+    NotificationsModule,
   ],
   controllers: [PaymentController],
   providers: [
