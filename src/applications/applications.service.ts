@@ -14,6 +14,8 @@ import { AwsS3Service } from '../aws-s3/aws-s3.service.js';
 import { StoragePrefix } from '../aws-s3/storage-prefix.js';
 import type { ApplicationFiles } from '../aws-s3/upload-file.js';
 import { Company } from '../companies/schema/company.schema.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
+import { NotificationType } from '../notifications/schema/notification.schema.js';
 import { isDuplicateKeyError } from '../shared/mongo/is-duplicate-key-error.js';
 import {
   searchWords,
@@ -84,6 +86,14 @@ type ApplicationKeys = Pick<ApplicationRecord, 'cvKey' | 'coverLetterKey'>;
 
 const FILE_KEYS_PROJECTION = 'cvKey coverLetterKey';
 
+const NOTIFIED_STATUS_CHANGES: readonly ApplicationStatus[] = [
+  ApplicationStatus.INTERVIEW,
+  ApplicationStatus.ACCEPTED,
+  ApplicationStatus.REJECTED,
+];
+
+type VacancyNotice = Pick<VacancyRecord, 'title' | 'company'>;
+
 @Injectable()
 export class ApplicationsService {
   private readonly logger = new Logger(ApplicationsService.name);
@@ -95,6 +105,7 @@ export class ApplicationsService {
     @InjectModel(Company.name) private readonly companyModel: Model<Company>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
     private readonly s3: AwsS3Service,
+    private readonly notifications: NotificationsService,
   ) {}
 
   toResponse(application: ApplicationRecord) {
@@ -140,7 +151,7 @@ export class ApplicationsService {
       throw new BadRequestException('You have no profile CV');
     }
 
-    await this.assertOpenForApplications(vacancyId);
+    const vacancy = await this.assertOpenForApplications(vacancyId);
 
     const existing = await this.applicationModel
       .findOne({ user: userId, vacancy: vacancyId })
@@ -180,6 +191,16 @@ export class ApplicationsService {
       ]);
     }
 
+    await this.notifications.notify(
+      vacancy.company.toString(),
+      AuthRole.COMPANY,
+      {
+        type: NotificationType.NEW_APPLICATION,
+        data: { vacancyTitle: vacancy.title, isReapply: Boolean(existing) },
+        target: { vacancyId, applicationId: application._id.toString() },
+      },
+    );
+
     return this.toResponse(application);
   }
 
@@ -217,8 +238,43 @@ export class ApplicationsService {
     if (!updated) throw new ConflictException('Application changed, try again');
 
     await this.deleteFiles([application.cvKey, application.coverLetterKey]);
+    await this.notifyWithdrawn(application.vacancy, id);
 
     return this.toResponse(updated);
+  }
+
+  async notifyCompanyRevoked(
+    companyId: string,
+    companyName: string,
+  ): Promise<void> {
+    try {
+      const vacancies = await this.vacancyModel
+        .find({ company: companyId })
+        .select('_id')
+        .lean<{ _id: Types.ObjectId }[]>();
+      if (vacancies.length === 0) return;
+      const vacancyIds = vacancies.map(({ _id }) => _id);
+
+      const userIds = await this.applicationModel.distinct('user', {
+        vacancy: { $in: vacancyIds },
+        user: { $exists: true },
+        status: { $ne: ApplicationStatus.WITHDRAWN },
+      });
+
+      await this.notifications.notifyMany(
+        userIds.map((userId) => userId.toString()),
+        AuthRole.USER,
+        {
+          type: NotificationType.APPLICANT_COMPANY_REVOKED,
+          data: { companyName },
+        },
+      );
+    } catch (error: unknown) {
+      this.logger.error(
+        'Failed to notify applicants of a revoked company',
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
   }
 
   async listMine(userId: string, query: MyApplicationsFilterDto) {
@@ -340,7 +396,10 @@ export class ApplicationsService {
       .lean<Pick<ApplicationRecord, 'vacancy' | 'user' | 'status'>>();
     if (!application) throw new NotFoundException('Application not found');
 
-    await this.assertManagedBy(application.vacancy, companyId);
+    const { vacancyTitle, companyName } = await this.assertManagedBy(
+      application.vacancy,
+      companyId,
+    );
 
     if (application.status === ApplicationStatus.WITHDRAWN) {
       throw new BadRequestException(
@@ -363,6 +422,24 @@ export class ApplicationsService {
       )
       .lean<ApplicationRecord>();
     if (!updated) throw new ConflictException('Application changed, try again');
+
+    if (
+      application.status !== status &&
+      NOTIFIED_STATUS_CHANGES.includes(status)
+    ) {
+      await this.notifications.notify(
+        application.user.toString(),
+        AuthRole.USER,
+        {
+          type: NotificationType.APPLICATION_STATUS_CHANGED,
+          data: { vacancyTitle, companyName, status },
+          target: {
+            vacancyId: application.vacancy.toString(),
+            applicationId: id,
+          },
+        },
+      );
+    }
 
     return {
       id: updated._id.toString(),
@@ -430,11 +507,41 @@ export class ApplicationsService {
     await this.deleteFiles(this.fileKeysOf(applications));
   }
 
-  private async assertOpenForApplications(vacancyId: string): Promise<void> {
+  private async notifyWithdrawn(
+    vacancyId: Types.ObjectId,
+    applicationId: string,
+  ): Promise<void> {
+    try {
+      const vacancy = await this.vacancyModel
+        .findById(vacancyId)
+        .select('title company')
+        .lean<VacancyNotice>();
+      if (!vacancy) return;
+
+      await this.notifications.notify(
+        vacancy.company.toString(),
+        AuthRole.COMPANY,
+        {
+          type: NotificationType.APPLICATION_WITHDRAWN,
+          data: { vacancyTitle: vacancy.title },
+          target: { vacancyId: vacancyId.toString(), applicationId },
+        },
+      );
+    } catch (error: unknown) {
+      this.logger.error(
+        'Failed to notify a company of a withdrawn application',
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
+
+  private async assertOpenForApplications(
+    vacancyId: string,
+  ): Promise<VacancyNotice> {
     const vacancy = await this.vacancyModel
       .findById(vacancyId)
-      .select('status deadline company')
-      .lean<Pick<VacancyRecord, 'status' | 'deadline' | 'company'>>();
+      .select('status deadline company title')
+      .lean<Pick<VacancyRecord, 'status' | 'deadline' | 'company' | 'title'>>();
     if (
       !vacancy ||
       (vacancy.status !== VacancyStatus.PUBLISHED &&
@@ -458,30 +565,34 @@ export class ApplicationsService {
         'This company is not accepting applications right now',
       );
     }
+
+    return { title: vacancy.title, company: vacancy.company };
   }
 
   private async assertManagedBy(
     vacancyId: string | Types.ObjectId,
     companyId: string,
-  ): Promise<void> {
+  ): Promise<{ vacancyTitle: string; companyName: string }> {
     const vacancy = await this.vacancyModel
       .findById(vacancyId)
-      .select('company')
-      .lean<Pick<VacancyRecord, 'company'>>();
+      .select('company title')
+      .lean<VacancyNotice>();
     if (!vacancy) throw new NotFoundException('Vacancy not found');
     if (vacancy.company.toString() !== companyId) {
       throw new ForbiddenException('No permission');
     }
 
-    const approved = await this.companyModel.exists({
-      _id: companyId,
-      approved: true,
-    });
-    if (!approved) {
+    const company = await this.companyModel
+      .findOne({ _id: companyId, approved: true })
+      .select('companyName')
+      .lean<Pick<Company, 'companyName'>>();
+    if (!company) {
       throw new ForbiddenException(
         'Your company must be approved to manage applications',
       );
     }
+
+    return { vacancyTitle: vacancy.title, companyName: company.companyName };
   }
 
   private async isManagedBy(
