@@ -238,7 +238,7 @@ Response `{ items, total, page, take }`. Two item shapes, told apart by `hidden`
 
 ### Status change (role `company`)
 
-`PATCH /applications/:id/status { status }`, `status` one of `viewed`, `interview`, `accepted`, `rejected`, in any order (a rejected application can be changed later). Approved company owning the vacancy only. Returns the visible applicant item (same shape as above). Errors: 404 `Application not found`, 403 `No permission`, 403 `Your company must be approved to manage applications`, 400 `A withdrawn application cannot be changed`, 400 `This applicant deleted their account` (status controls are hidden on hidden rows, so this only comes from a direct call), 409 `Application changed, try again` (the user withdrew at the same moment; reload).
+`PATCH /applications/:id/status { status }`, `status` one of `viewed`, `interview`, `accepted`, `rejected`, in any order (a rejected application can be changed later). Approved company owning the vacancy only. Returns `{ id, status, appliedAt }` only; update the status on the card you already have, do not expect applicant details in the answer. Errors: 404 `Application not found`, 403 `No permission`, 403 `Your company must be approved to manage applications`, 400 `A withdrawn application cannot be changed`, 400 `This applicant deleted their account` (status controls are hidden on hidden rows, so this only comes from a direct call), 409 `Application changed, try again` (the user withdrew at the same moment; reload).
 
 ### Application files (roles `user` and `company`)
 
