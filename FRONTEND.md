@@ -318,7 +318,7 @@ Each type also gets its own icon shape, so items differ even within one tone (lu
 
 Only users bookmark; companies and admins get 403 on all three routes.
 
-- `POST /vacancies/:id/bookmark`: adds. No body. Answers `{ bookmarked: true }`. Sending it again changes nothing and answers the same, so a double click is safe. 404 `Vacancy not found` unless the vacancy is `published` and not expired (drafts, pending, rejected, closed and expired ones cannot be bookmarked).
+- `POST /vacancies/:id/bookmark`: adds. No body. Answers `{ bookmarked: true }`. Sending it again changes nothing and answers the same, so a double click is safe. 404 `Vacancy not found` unless the vacancy is publicly visible: published, expired or closed ones can be bookmarked; drafts, pending and rejected ones answer 404, the same as the details page.
 - `DELETE /vacancies/:id/bookmark`: removes. Answers `{ bookmarked: false }` whether or not it was bookmarked. Works for any vacancy id, so an unavailable vacancy can still be removed from the list.
 - `GET /bookmarks?page=&take=`: the user's bookmarks, newest bookmark first. `take` defaults to 10, max 30. Answers `{ items, total, page, take }`.
 
