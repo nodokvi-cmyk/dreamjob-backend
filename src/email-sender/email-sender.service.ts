@@ -75,10 +75,7 @@ export class EmailSenderService {
     });
   }
 
-  private async sendNotice(
-    to: string,
-    props: PlanNoticeEmailProps,
-  ): Promise<void> {
+  async sendNotice(to: string, props: PlanNoticeEmailProps): Promise<void> {
     const { subject, html, text } = await renderPlanNoticeEmail(props);
 
     try {
@@ -91,7 +88,7 @@ export class EmailSenderService {
       });
     } catch (error: unknown) {
       this.logger.error(
-        'Failed to send plan notice email',
+        'Failed to send notice email',
         error instanceof Error ? error.stack : String(error),
       );
       throw new ServiceUnavailableException('Failed to send the email');
