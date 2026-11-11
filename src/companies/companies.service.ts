@@ -13,7 +13,9 @@ import {
 } from '../aws-s3/process-image.js';
 import { StoragePrefix } from '../aws-s3/storage-prefix.js';
 import { EmailClaimsService } from '../email-claims/email-claims.service.js';
+import { ApplicationsService } from '../applications/applications.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { NotificationType } from '../notifications/schema/notification.schema.js';
 import { hashChangedPassword } from '../shared/crypto/change-password.js';
 import { ChangePasswordDto } from '../shared/dto/change-password.dto.js';
 import { PaginationDto } from '../shared/dto/pagination.dto.js';
@@ -47,6 +49,7 @@ export class CompaniesService implements EmailChangeStore {
     private readonly s3: AwsS3Service,
     private readonly vacancies: VacanciesService,
     private readonly notifications: NotificationsService,
+    private readonly applications: ApplicationsService,
   ) {}
 
   toResponse(company: CompanyDocument) {
@@ -382,23 +385,34 @@ export class CompaniesService implements EmailChangeStore {
       );
     }
 
-    const company = await this.companyModel.findByIdAndUpdate(
-      id,
+    const company = await this.companyModel.findOneAndUpdate(
+      { _id: id, approved: { $ne: true } },
       { approved: true },
       { new: true },
     );
-    if (!company) throw new NotFoundException('Company not found');
+    if (!company) return this.findOne(id);
+
+    await this.notifications.notify(id, AuthRole.COMPANY, {
+      type: NotificationType.COMPANY_APPROVED,
+      data: { companyName: company.companyName },
+    });
 
     return company;
   }
 
   async revoke(id: string): Promise<CompanyDocument> {
-    const company = await this.companyModel.findByIdAndUpdate(
-      id,
+    const company = await this.companyModel.findOneAndUpdate(
+      { _id: id, approved: true },
       { approved: false },
       { new: true },
     );
-    if (!company) throw new NotFoundException('Company not found');
+    if (!company) return this.findOne(id);
+
+    await this.notifications.notify(id, AuthRole.COMPANY, {
+      type: NotificationType.COMPANY_REVOKED,
+      data: { companyName: company.companyName },
+    });
+    await this.applications.notifyCompanyRevoked(id, company.companyName);
 
     return company;
   }
