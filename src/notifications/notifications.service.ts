@@ -5,12 +5,15 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, QueryFilter, Types } from 'mongoose';
 import { Company } from '../companies/schema/company.schema.js';
+import { EmailSenderService } from '../email-sender/email-sender.service.js';
 import { PaginationDto } from '../shared/dto/pagination.dto.js';
 import { AuthRole } from '../shared/types/auth-role.js';
 import { User } from '../users/schema/user.schema.js';
+import { notificationEmail } from './notification-email.js';
 import {
   Notification,
   NotificationData,
@@ -52,6 +55,8 @@ export class NotificationsService {
     private readonly notificationModel: Model<Notification>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
     @InjectModel(Company.name) private readonly companyModel: Model<Company>,
+    private readonly emailSender: EmailSenderService,
+    private readonly config: ConfigService,
   ) {}
 
   async notify(
@@ -85,6 +90,51 @@ export class NotificationsService {
     } catch (error: unknown) {
       this.logger.error(
         `Failed to create ${input.type} notifications`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+
+    await this.sendEmails(recipients, recipientRole, input);
+  }
+
+  private async sendEmails(
+    recipients: readonly string[],
+    recipientRole: NotificationRecipientRole,
+    input: NotificationInput,
+  ): Promise<void> {
+    const email = notificationEmail(
+      {
+        type: input.type,
+        data: input.data ?? {},
+        vacancyId: input.target?.vacancyId,
+      },
+      this.config.getOrThrow<string>('FRONTEND_URI'),
+    );
+    if (!email) return;
+
+    try {
+      const filter = { _id: { $in: recipients } };
+      const accounts =
+        recipientRole === AuthRole.USER
+          ? await this.userModel
+              .find(filter)
+              .select('email')
+              .lean<{ email: string }[]>()
+          : await this.companyModel
+              .find(filter)
+              .select('email')
+              .lean<{ email: string }[]>();
+
+      await Promise.all(
+        accounts.map(({ email: to }) =>
+          this.emailSender.sendNotice(to, email).catch(() => {
+            this.logger.warn(`${input.type} email was not sent`);
+          }),
+        ),
+      );
+    } catch (error: unknown) {
+      this.logger.error(
+        `Failed to send ${input.type} emails`,
         error instanceof Error ? error.stack : String(error),
       );
     }
