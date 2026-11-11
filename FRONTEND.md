@@ -67,6 +67,44 @@ Status values the API returns: `notSubmitted`, `pending`, `published`, `rejected
 
 Response ids: a vacancy uses `id` (not `_id`).
 
+### Lists return light cards (breaking change)
+
+`GET /vacancies`, `GET /vacancies/mine` and `GET /vacancies/admin` return light cards, not full vacancies. Every card has:
+
+```
+{ id, title, excerpt, category, employmentType, workMode, location, salaryMin, salaryMax, currency, deadline, createdAt, company, status, companyApproved }
+```
+
+- `excerpt`: the start of the description, at most 250 characters, cut at a word boundary and ending with `...` (the whole text when it is shorter). Cards have no `description` and no `requirements`; the details page has them.
+- `salaryMin` and `salaryMax` are `null` when not set (the details page still leaves them out when not set).
+- `companyApproved: false`: show the warning "This company currently has no approved status" and the company name as plain text (its public page answers 404).
+
+Per list:
+- `GET /vacancies` (public): also `myApplication` and `isBookmarked` (below). `status` is always `published`. No photos.
+- `GET /vacancies/mine` (company): also `rejectionReason`, `submittedAt?`, `firstPublishedAt?`, `freeWindowEndsAt?`, `updatedAt`, and `photos` as `[{ id, url }]` (kept for the delete confirm, which counts them).
+- `GET /vacancies/admin`: also `rejectionReason`, `submittedAt?`, `firstPublishedAt?`, `freeWindowEndsAt?`, `updatedAt`. No photos.
+
+`GET /vacancies/:id` still returns the full vacancy (photos, description, requirements, `status`) and now also `companyApproved`, `myApplication` and `isBookmarked`. Create, update, close, submit, extend, approve, reject, photo and delete responses keep the full vacancy without these three fields.
+
+**`myApplication` and `isBookmarked`** (on public cards, bookmark cards and the details page):
+- `myApplication`: `{ id, status, canReapply, submissions }` or `null` when the user never applied. `canReapply` is true only when the application is `rejected` or `withdrawn`, it was the first submission, it is not locked, the vacancy is `published` (not expired) and the company is approved.
+- `isBookmarked`: `true` or `false`.
+- Real values only for a request with a user token. Anonymous visitors, companies and admins always get `null` and `false`.
+
+**Send the token.** `GET /vacancies` now reads an optional token (a missing or bad token counts as anonymous). The vacancies page and the latest-vacancies block on the home page load on the Next.js server, which has no access to the token in `localStorage`. For a logged-in user, fetch the list (and the details page) from the browser with the `Authorization` header, or `myApplication` is always `null` and `isBookmarked` always `false`. Anonymous visitors can keep the server-rendered list.
+
+**Parsers to change.** `parseVacancy` requires `requirements`, which cards do not have, so list items (public list, home latest block, `mine`, `admin`) need a card parser; the details page keeps the full parser.
+
+**Apply button** (cards and details page, role `user`):
+- Green "Apply", clickable: `myApplication` is `null` and the vacancy is open (published, not expired, `companyApproved` true).
+- Blue "Reapply", clickable: `myApplication.canReapply` is true.
+- Grey "Applied" (`submissions` 1) or "Reapplied" (`submissions` 2), disabled: any other application.
+- Grey "Apply", disabled: no application and the vacancy is expired, closed or `companyApproved` is false.
+- The button text never says why it is disabled; a tooltip on a wrapper around the button shows the reason on hover, and on tap on phones.
+- Anonymous visitors see Apply; it goes to sign-in.
+
+**Bookmark heart** (cards and details page): only for logged-in users, filled when `isBookmarked` is true; a click calls `POST` or `DELETE /vacancies/:id/bookmark`. Hidden for anonymous visitors (decided), and for companies and admins, who cannot bookmark (403).
+
 | Route | Who |
 | --- | --- |
 | `GET /vacancies` | public, published and not expired |
@@ -144,7 +182,7 @@ All amounts are USD. Stripe hosts every payment page: the frontend only redirect
 
 ## Applications
 
-Built: apply, reapply and withdraw (users), the user's own list, the company's applicant list, status changes by the company, and links to the application files. Not yet built: the Apply/Reapply/Applied state on vacancy cards and the detail page (`myApplication`, comes later). Until then, a card or detail page cannot tell whether the user already applied (a repeat apply answers 409); the "My applications" page can.
+Built: apply, reapply and withdraw (users), the user's own list, the company's applicant list, status changes by the company, links to the application files, and `myApplication` on vacancy cards and the details page (see "Lists return light cards" under Vacancies).
 
 **Apply or reapply:** `POST /vacancies/:id/applications`, `multipart/form-data`. All fields are optional, so a user can apply with nothing at all:
 - `message`: text, at most 100 words and 800 characters (trimmed; empty means no message).
@@ -206,7 +244,7 @@ Account deletion: deleting a user keeps their applications for the company as "D
 }
 ```
 
-- `vacancy.status` is `published`, `expired`, `closed` or `unavailable`. `unavailable` means the company edited the vacancy and it waits for admin review (or the edit was rejected); the details page answers 404 to users meanwhile. Show "Temporarily unavailable" and the title as plain text. Link the title to the vacancy only for `published`, `expired` and `closed`. The application itself always stays in the list and keeps its own status.
+- `vacancy.status` is `published`, `expired`, `closed` or `unavailable`. `unavailable` means the company edited the vacancy and it waits for admin review (or the edit was rejected); the details page answers 404 to users meanwhile. Show "Temporarily unavailable" and the title as plain text. Link the title to the vacancy only for `published`, `expired` and `closed`. The application itself always stays in the list and keeps its own status. While `unavailable`, `vacancy.title` is the last title the admin approved, never the edited one, and `q` searches that same title.
 - `vacancy` is `null` only if the vacancy was deleted during the request (its applications are deleted with it); skip such an item.
 - `companyApproved: false`: show the warning "This company currently has no approved status" and the company name as plain text (its public page answers 404).
 - `canReapply: true` shows the blue Reapply button on that item. It is true only when the application is `rejected` or `withdrawn`, it was the first submission, it is not locked, the vacancy is `published` and the company is approved.
@@ -326,19 +364,21 @@ Only users bookmark; companies and admins get 403 on all three routes.
 {
   id,
   createdAt,
-  vacancy: { id, title, category, employmentType, workMode, location, salaryMin, salaryMax, currency, deadline, company, status } | null,
-  companyApproved
+  vacancy: { id, title, excerpt, category, employmentType, workMode, location, salaryMin, salaryMax, currency, deadline, createdAt, company, status, companyApproved, myApplication, isBookmarked } | null
 }
 ```
 
+Breaking change: `vacancy` is now the same light card as the public list (see "Lists return light cards" under Vacancies), and `companyApproved` moved from the item into `vacancy`. Render it with the same card component, so Apply, Reapply and the heart behave the same as on the main list; `isBookmarked` is always `true` here.
+
 - `id` is the bookmark id; use `vacancy.id` for the remove call and for links.
 - `vacancy.status` is `published`, `expired`, `closed` or `unavailable`. `unavailable` means the company edited the vacancy and it waits for admin review (or the edit was rejected); the details page answers 404 to users meanwhile. Show "Temporarily unavailable" and the title as plain text, with the remove button. Link the title only for `published`, `expired` and `closed`. Bookmarks of unavailable, closed and expired vacancies stay in the list until the user removes them.
+- While `unavailable`, the card shows the last version the admin approved (title, excerpt, category, work mode, employment type, location, salary, currency), never the edited one; `deadline` and `status` are current.
 - `salaryMin` and `salaryMax` are `null` when not set.
 - `vacancy` is `null` only if the vacancy was deleted during the request (bookmarks are deleted with it); skip such an item.
-- `companyApproved: false`: show the warning "This company currently has no approved status" and the company name as plain text (its public page answers 404).
-- Deleting the user account deletes the bookmarks. This list is a simple summary; the shared light card shape comes later with the vacancy response change.
+- `vacancy.companyApproved: false`: show the warning "This company currently has no approved status" and the company name as plain text (its public page answers 404).
+- Deleting the user account deletes the bookmarks.
 - Use skeleton loaders while the list loads.
 
 ## Not built yet (do not build screens for these)
 
-Apply button states on vacancy cards and the detail page, bookmark hearts on vacancy cards and the detail page (the bookmark routes and page exist, `isBookmarked` on cards comes later), chatbot, public company page, past vacancies section, a billing history list inside the site (use the portal), Stripe payments for anything except plans, vacancy submits and vacancy extensions.
+Chatbot, public company page, past vacancies section, a billing history list inside the site (use the portal), Stripe payments for anything except plans, vacancy submits and vacancy extensions.
