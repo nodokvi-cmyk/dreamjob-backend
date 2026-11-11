@@ -8,20 +8,40 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, QueryFilter, Types } from 'mongoose';
 import { assertPdf, PDF_CONTENT_TYPE } from '../aws-s3/assert-pdf.js';
 import { AwsS3Service } from '../aws-s3/aws-s3.service.js';
 import { StoragePrefix } from '../aws-s3/storage-prefix.js';
 import type { ApplicationFiles } from '../aws-s3/upload-file.js';
 import { Company } from '../companies/schema/company.schema.js';
 import { isDuplicateKeyError } from '../shared/mongo/is-duplicate-key-error.js';
-import { User } from '../users/schema/user.schema.js';
+import {
+  searchWords,
+  wordStartPattern,
+} from '../shared/mongo/search-patterns.js';
+import { AuthRole } from '../shared/types/auth-role.js';
+import type { Viewer } from '../shared/types/viewer.js';
+import { ageFrom, User } from '../users/schema/user.schema.js';
 import {
   Vacancy,
   VacancyRecord,
   VacancyStatus,
 } from '../vacancies/schema/vacancy.schema.js';
+import { vacancyViewStatus } from '../vacancies/vacancy-status.js';
+import {
+  applicantAggregateOptions,
+  applicantCountPipeline,
+  applicantFocusPipeline,
+  applicantPagePipeline,
+  applicantSearchWords,
+} from './applicant-pipeline.js';
+import type {
+  ApplicantSort,
+  ApplicantsFilterDto,
+} from './dto/applicants-filter.dto.js';
 import { ApplyDto } from './dto/apply.dto.js';
+import type { MyApplicationsFilterDto } from './dto/my-applications-filter.dto.js';
+import type { UpdateApplicationStatusDto } from './dto/update-application-status.dto.js';
 import {
   Application,
   ApplicationRecord,
@@ -31,6 +51,28 @@ import {
   PreviousOutcome,
   WITHDRAWABLE_APPLICATION_STATUSES,
 } from './schema/application.schema.js';
+
+const UNAVAILABLE_VACANCY_STATUS = 'unavailable';
+
+export type ApplicationFileField = 'cvKey' | 'coverLetterKey';
+
+type ApplicationFilter = QueryFilter<Application>;
+
+type VacancySummarySource = Pick<
+  VacancyRecord,
+  '_id' | 'title' | 'company' | 'deadline' | 'status' | 'submittedAt'
+>;
+
+type ApplicantUser = Pick<
+  User,
+  'firstName' | 'lastName' | 'birthDate' | 'email' | 'phone' | 'avatarKey'
+> & { _id: Types.ObjectId };
+
+type ApplicantRow = ApplicationRecord & { applicant?: ApplicantUser | null };
+
+const MAX_TITLE_SEARCH_WORDS = 5;
+
+const VACANCY_SUMMARY_PROJECTION = 'title company deadline status submittedAt';
 
 type StoredFiles = Partial<Pick<Application, 'cvKey' | 'coverLetterKey'>>;
 
@@ -179,6 +221,186 @@ export class ApplicationsService {
     return this.toResponse(updated);
   }
 
+  async listMine(userId: string, query: MyApplicationsFilterDto) {
+    const { page, take, status, q, sort } = query;
+    const user = new Types.ObjectId(userId);
+    const words = q ? searchWords(q, MAX_TITLE_SEARCH_WORDS) : [];
+    const vacancyIds =
+      words.length > 0 ? await this.findVacancyIdsByTitle(user, words) : null;
+    if (vacancyIds && vacancyIds.length === 0) {
+      return { items: [], total: 0, page, take };
+    }
+
+    const filter: ApplicationFilter = {
+      user,
+      ...(status ? { status } : {}),
+      ...(vacancyIds ? { vacancy: { $in: vacancyIds } } : {}),
+    };
+    const direction = sort === 'date' ? 1 : -1;
+
+    const [applications, total] = await Promise.all([
+      this.applicationModel
+        .find(filter)
+        .sort({ appliedAt: direction, _id: direction })
+        .skip((page - 1) * take)
+        .limit(take)
+        .lean<ApplicationRecord[]>(),
+      this.applicationModel.countDocuments(filter),
+    ]);
+    if (applications.length === 0) return { items: [], total, page, take };
+
+    const vacancies = await this.vacancyModel
+      .find({ _id: { $in: applications.map(({ vacancy }) => vacancy) } })
+      .select(VACANCY_SUMMARY_PROJECTION)
+      .lean<VacancySummarySource[]>();
+    const approvedCompanies = await this.companyModel
+      .find({
+        _id: { $in: vacancies.map(({ company }) => company) },
+        approved: true,
+      })
+      .select('_id')
+      .lean<{ _id: Types.ObjectId }[]>();
+
+    const vacancyById = new Map(
+      vacancies.map((vacancy) => [vacancy._id.toString(), vacancy]),
+    );
+    const approvedIds = new Set(
+      approvedCompanies.map(({ _id }) => _id.toString()),
+    );
+
+    return {
+      items: applications.map((application) => {
+        const vacancy = vacancyById.get(application.vacancy.toString());
+        const companyApproved = vacancy
+          ? approvedIds.has(vacancy.company.toString())
+          : false;
+
+        return this.toMyApplicationResponse(
+          application,
+          vacancy,
+          companyApproved,
+        );
+      }),
+      total,
+      page,
+      take,
+    };
+  }
+
+  async listApplicants(
+    vacancyId: string,
+    companyId: string,
+    query: ApplicantsFilterDto,
+  ) {
+    await this.assertManagedBy(vacancyId, companyId);
+
+    const { take, status, focus } = query;
+    const sort = query.sort ?? '-date';
+    const match: ApplicationFilter = {
+      vacancy: new Types.ObjectId(vacancyId),
+      ...(status ? { status } : {}),
+    };
+    const words = applicantSearchWords(query.q);
+    const focusPage = focus
+      ? await this.findFocusPage(match, sort, words, focus, take)
+      : undefined;
+    const page = focusPage ?? query.page;
+
+    const [rows, total] = await Promise.all([
+      this.applicationModel.aggregate<ApplicantRow>(
+        applicantPagePipeline(
+          match,
+          sort,
+          words,
+          (page - 1) * take,
+          take,
+          this.userModel.collection.name,
+        ),
+        applicantAggregateOptions(sort),
+      ),
+      this.countApplicants(match, words),
+    ]);
+
+    return {
+      items: rows.map((row) => this.toApplicantResponse(row)),
+      total,
+      page,
+      take,
+    };
+  }
+
+  async updateStatus(
+    id: string,
+    companyId: string,
+    { status }: UpdateApplicationStatusDto,
+  ) {
+    const application = await this.applicationModel
+      .findById(id)
+      .select('vacancy user status')
+      .lean<Pick<ApplicationRecord, 'vacancy' | 'user' | 'status'>>();
+    if (!application) throw new NotFoundException('Application not found');
+
+    await this.assertManagedBy(application.vacancy, companyId);
+
+    if (application.status === ApplicationStatus.WITHDRAWN) {
+      throw new BadRequestException(
+        'A withdrawn application cannot be changed',
+      );
+    }
+    if (!application.user) {
+      throw new BadRequestException('This applicant deleted their account');
+    }
+
+    const updated = await this.applicationModel
+      .findOneAndUpdate(
+        {
+          _id: id,
+          user: { $exists: true },
+          status: { $ne: ApplicationStatus.WITHDRAWN },
+        },
+        { $set: { status } },
+        { new: true },
+      )
+      .lean<ApplicationRecord>();
+    if (!updated) throw new ConflictException('Application changed, try again');
+
+    return {
+      id: updated._id.toString(),
+      status: updated.status,
+      appliedAt: updated.appliedAt,
+    };
+  }
+
+  async fileUrl(id: string, viewer: Viewer, field: ApplicationFileField) {
+    const application = await this.applicationModel
+      .findById(id)
+      .select('user vacancy status cvKey coverLetterKey')
+      .lean<
+        Pick<
+          ApplicationRecord,
+          'user' | 'vacancy' | 'status' | 'cvKey' | 'coverLetterKey'
+        >
+      >();
+    const key = application?.[field];
+    if (
+      !application ||
+      !key ||
+      !application.user ||
+      application.status === ApplicationStatus.WITHDRAWN
+    ) {
+      throw new NotFoundException('File not found');
+    }
+
+    const allowed =
+      viewer.accountRole === AuthRole.USER
+        ? application.user.toString() === viewer.accountId
+        : viewer.accountRole === AuthRole.COMPANY &&
+          (await this.isManagedBy(application.vacancy, viewer.accountId));
+    if (!allowed) throw new NotFoundException('File not found');
+
+    return this.s3.presignedUrl(key);
+  }
+
   async removeForVacancies(
     vacancyIds: readonly (string | Types.ObjectId)[],
   ): Promise<void> {
@@ -236,6 +458,168 @@ export class ApplicationsService {
         'This company is not accepting applications right now',
       );
     }
+  }
+
+  private async assertManagedBy(
+    vacancyId: string | Types.ObjectId,
+    companyId: string,
+  ): Promise<void> {
+    const vacancy = await this.vacancyModel
+      .findById(vacancyId)
+      .select('company')
+      .lean<Pick<VacancyRecord, 'company'>>();
+    if (!vacancy) throw new NotFoundException('Vacancy not found');
+    if (vacancy.company.toString() !== companyId) {
+      throw new ForbiddenException('No permission');
+    }
+
+    const approved = await this.companyModel.exists({
+      _id: companyId,
+      approved: true,
+    });
+    if (!approved) {
+      throw new ForbiddenException(
+        'Your company must be approved to manage applications',
+      );
+    }
+  }
+
+  private async isManagedBy(
+    vacancyId: Types.ObjectId,
+    companyId: string,
+  ): Promise<boolean> {
+    const [owned, approved] = await Promise.all([
+      this.vacancyModel.exists({ _id: vacancyId, company: companyId }),
+      this.companyModel.exists({ _id: companyId, approved: true }),
+    ]);
+
+    return Boolean(owned && approved);
+  }
+
+  private async findVacancyIdsByTitle(
+    user: Types.ObjectId,
+    words: readonly string[],
+  ): Promise<Types.ObjectId[]> {
+    const appliedIds = await this.applicationModel.distinct('vacancy', {
+      user,
+    });
+    const matches = await this.vacancyModel
+      .find({
+        _id: { $in: appliedIds },
+        $and: words.map((word) => ({
+          title: { $regex: wordStartPattern(word), $options: 'i' },
+        })),
+      })
+      .select('_id')
+      .lean<{ _id: Types.ObjectId }[]>();
+
+    return matches.map(({ _id }) => _id);
+  }
+
+  private async countApplicants(
+    match: ApplicationFilter,
+    words: readonly string[],
+  ): Promise<number> {
+    if (words.length === 0) return this.applicationModel.countDocuments(match);
+
+    const [result] = await this.applicationModel.aggregate<{ total: number }>(
+      applicantCountPipeline(match, words, this.userModel.collection.name),
+    );
+
+    return result?.total ?? 0;
+  }
+
+  private async findFocusPage(
+    match: ApplicationFilter,
+    sort: ApplicantSort,
+    words: readonly string[],
+    focus: string,
+    take: number,
+  ): Promise<number | undefined> {
+    const [result] = await this.applicationModel.aggregate<{ index: number }>(
+      applicantFocusPipeline(
+        match,
+        sort,
+        words,
+        new Types.ObjectId(focus),
+        this.userModel.collection.name,
+      ),
+      applicantAggregateOptions(sort),
+    );
+    if (!result || result.index < 0) return undefined;
+
+    return Math.floor(result.index / take) + 1;
+  }
+
+  private vacancyStatusForUser(vacancy: VacancySummarySource) {
+    if (
+      vacancy.status === VacancyStatus.PENDING ||
+      vacancy.status === VacancyStatus.REJECTED
+    ) {
+      return UNAVAILABLE_VACANCY_STATUS;
+    }
+
+    return vacancyViewStatus(vacancy);
+  }
+
+  private toMyApplicationResponse(
+    application: ApplicationRecord,
+    vacancy: VacancySummarySource | undefined,
+    companyApproved: boolean,
+  ) {
+    const vacancyStatus = vacancy ? this.vacancyStatusForUser(vacancy) : null;
+
+    return {
+      ...this.toResponse(application),
+      vacancy: vacancy
+        ? {
+            id: vacancy._id.toString(),
+            title: vacancy.title,
+            company: vacancy.company.toString(),
+            deadline: vacancy.deadline,
+            status: vacancyStatus,
+          }
+        : null,
+      companyApproved,
+      canReapply:
+        this.isReapplyAllowed(application) &&
+        vacancyStatus === VacancyStatus.PUBLISHED &&
+        companyApproved,
+    };
+  }
+
+  private toApplicantResponse(row: ApplicantRow) {
+    const { applicant } = row;
+    if (row.status === ApplicationStatus.WITHDRAWN || !row.user || !applicant) {
+      return {
+        id: row._id.toString(),
+        status: row.status,
+        appliedAt: row.appliedAt,
+        hidden: true as const,
+      };
+    }
+
+    return {
+      id: row._id.toString(),
+      status: row.status,
+      appliedAt: row.appliedAt,
+      firstAppliedAt: row.firstAppliedAt,
+      isReapply: row.submissions === MAX_APPLICATION_SUBMISSIONS,
+      previousOutcome: row.previousOutcome ?? null,
+      message: row.message ?? '',
+      hasCv: Boolean(row.cvKey),
+      hasCoverLetter: Boolean(row.coverLetterKey),
+      hidden: false as const,
+      applicant: {
+        id: applicant._id.toString(),
+        firstName: applicant.firstName,
+        lastName: applicant.lastName,
+        avatarUrl: this.s3.publicUrl(applicant.avatarKey),
+        email: applicant.email,
+        phone: applicant.phone,
+        age: ageFrom(applicant.birthDate) ?? null,
+      },
+    };
   }
 
   private isReapplyAllowed(application: ApplicationRecord): boolean {
