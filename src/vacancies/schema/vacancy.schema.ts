@@ -56,6 +56,39 @@ export enum Currency {
 
 export const MAX_VACANCY_PHOTOS = 3;
 
+@Schema({ _id: false })
+export class ApprovedVacancyCard {
+  @Prop({ type: String, required: true })
+  title!: string;
+
+  @Prop({ type: String, required: true })
+  category!: string;
+
+  @Prop({ type: String, enum: EmploymentType, required: true })
+  employmentType!: EmploymentType;
+
+  @Prop({ type: String, enum: WorkMode, required: true })
+  workMode!: WorkMode;
+
+  @Prop({ type: String, default: '' })
+  location!: string;
+
+  @Prop({ type: Number, required: false })
+  salaryMin?: number;
+
+  @Prop({ type: Number, required: false })
+  salaryMax?: number;
+
+  @Prop({ type: String, enum: Currency, required: true })
+  currency!: Currency;
+
+  @Prop({ type: String, default: '' })
+  excerpt!: string;
+}
+
+export const approvedVacancyCardSchema =
+  SchemaFactory.createForClass(ApprovedVacancyCard);
+
 @Schema({ timestamps: true })
 export class Vacancy {
   @Prop({ type: String, required: true, trim: true, maxlength: 128 })
@@ -124,6 +157,9 @@ export class Vacancy {
 
   @Prop({ type: String, required: false })
   checkoutSessionId?: string;
+
+  @Prop({ type: approvedVacancyCardSchema, required: false })
+  approvedCard?: ApprovedVacancyCard;
 
   declare readonly createdAt: Date;
   declare readonly updatedAt: Date;
