@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { ApplicationsService } from '../applications/applications.service.js';
+import { approvedCompanyIds } from '../companies/approved-company-ids.js';
 import { Company } from '../companies/schema/company.schema.js';
 import type { PaginationDto } from '../shared/dto/pagination.dto.js';
 import { isDuplicateKeyError } from '../shared/mongo/is-duplicate-key-error.js';
@@ -10,28 +12,13 @@ import {
   VacancyRecord,
   VacancyStatus,
 } from '../vacancies/schema/vacancy.schema.js';
-import { vacancyStatusForUser } from '../vacancies/vacancy-status.js';
+import {
+  type UserCardContext,
+  userVacancyCard,
+  VACANCY_CARD_PROJECTION,
+  type VacancyCardSource,
+} from '../vacancies/vacancy-card.js';
 import { Bookmark, BookmarkRecord } from './schema/bookmark.schema.js';
-
-const VACANCY_SUMMARY_PROJECTION =
-  'title category employmentType workMode location salaryMin salaryMax currency deadline company status submittedAt';
-
-type VacancySummarySource = Pick<
-  VacancyRecord,
-  | '_id'
-  | 'title'
-  | 'category'
-  | 'employmentType'
-  | 'workMode'
-  | 'location'
-  | 'salaryMin'
-  | 'salaryMax'
-  | 'currency'
-  | 'deadline'
-  | 'company'
-  | 'status'
-  | 'submittedAt'
->;
 
 @Injectable()
 export class BookmarksService {
@@ -40,6 +27,7 @@ export class BookmarksService {
     @InjectModel(Vacancy.name) private readonly vacancyModel: Model<Vacancy>,
     @InjectModel(Company.name) private readonly companyModel: Model<Company>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
+    private readonly applications: ApplicationsService,
   ) {}
 
   async add(vacancyId: string, userId: string) {
@@ -108,21 +96,25 @@ export class BookmarksService {
 
     const vacancies = await this.vacancyModel
       .find({ _id: { $in: bookmarks.map(({ vacancy }) => vacancy) } })
-      .select(VACANCY_SUMMARY_PROJECTION)
-      .lean<VacancySummarySource[]>();
-    const approvedCompanies = await this.companyModel
-      .find({
-        _id: { $in: vacancies.map(({ company }) => company) },
-        approved: true,
-      })
-      .select('_id')
-      .lean<{ _id: Types.ObjectId }[]>();
+      .select(VACANCY_CARD_PROJECTION)
+      .lean<VacancyCardSource[]>();
+    const approvedIds = await approvedCompanyIds(
+      this.companyModel,
+      vacancies.map(({ company }) => company),
+    );
+    const applications = await this.applications.myApplicationsFor(
+      userId,
+      vacancies,
+      approvedIds,
+    );
+    const context: UserCardContext = {
+      approvedIds,
+      applications,
+      bookmarked: new Set(vacancies.map(({ _id }) => _id.toString())),
+    };
 
     const vacancyById = new Map(
       vacancies.map((vacancy) => [vacancy._id.toString(), vacancy]),
-    );
-    const approvedIds = new Set(
-      approvedCompanies.map(({ _id }) => _id.toString()),
     );
 
     return {
@@ -130,13 +122,27 @@ export class BookmarksService {
         this.toResponse(
           bookmark,
           vacancyById.get(bookmark.vacancy.toString()),
-          approvedIds,
+          context,
         ),
       ),
       total,
       page,
       take,
     };
+  }
+
+  async bookmarkedIds(
+    userId: string,
+    vacancyIds: readonly Types.ObjectId[],
+  ): Promise<Set<string>> {
+    if (vacancyIds.length === 0) return new Set();
+
+    const vacancies: Types.ObjectId[] = await this.bookmarkModel.distinct(
+      'vacancy',
+      { user: new Types.ObjectId(userId), vacancy: { $in: vacancyIds } },
+    );
+
+    return new Set(vacancies.map((id) => id.toString()));
   }
 
   async removeForVacancies(
@@ -153,31 +159,13 @@ export class BookmarksService {
 
   private toResponse(
     bookmark: BookmarkRecord,
-    vacancy: VacancySummarySource | undefined,
-    approvedIds: ReadonlySet<string>,
+    vacancy: VacancyCardSource | undefined,
+    context: UserCardContext,
   ) {
     return {
       id: bookmark._id.toString(),
       createdAt: bookmark.createdAt,
-      vacancy: vacancy
-        ? {
-            id: vacancy._id.toString(),
-            title: vacancy.title,
-            category: vacancy.category,
-            employmentType: vacancy.employmentType,
-            workMode: vacancy.workMode,
-            location: vacancy.location,
-            salaryMin: vacancy.salaryMin ?? null,
-            salaryMax: vacancy.salaryMax ?? null,
-            currency: vacancy.currency,
-            deadline: vacancy.deadline,
-            company: vacancy.company.toString(),
-            status: vacancyStatusForUser(vacancy),
-          }
-        : null,
-      companyApproved: vacancy
-        ? approvedIds.has(vacancy.company.toString())
-        : false,
+      vacancy: vacancy ? userVacancyCard(vacancy, context) : null,
     };
   }
 }
