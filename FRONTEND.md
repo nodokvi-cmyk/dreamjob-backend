@@ -102,6 +102,7 @@ Per list:
 - Grey "Apply", disabled: no application and the vacancy is expired, closed or `companyApproved` is false.
 - The button text never says why it is disabled; a tooltip on a wrapper around the button shows the reason on hover, and on tap on phones.
 - Anonymous visitors see Apply; it goes to sign-in.
+- TODO (later, decided 2026-11-12): also show a small badge with the application status on cards and the details page, read from `myApplication.status` (for example "Interview" or "Rejected"). The backend already sends it; no backend change.
 
 **Bookmark heart** (cards and details page): only for logged-in users, filled when `isBookmarked` is true; a click calls `POST` or `DELETE /vacancies/:id/bookmark`. Hidden for anonymous visitors (decided), and for companies and admins, who cannot bookmark (403).
 
