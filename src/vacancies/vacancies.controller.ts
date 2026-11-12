@@ -51,8 +51,12 @@ export class VacanciesController {
   constructor(private readonly vacanciesService: VacanciesService) {}
 
   @Get()
-  findAll(@Query() query: VacancyFilterDto) {
-    return this.vacanciesService.listPublic(query);
+  @UseGuards(OptionalAuthGuard)
+  findAll(
+    @Query() query: VacancyFilterDto,
+    @OptionalViewer() viewer: Viewer | null,
+  ) {
+    return this.vacanciesService.listPublic(query, viewer);
   }
 
   @Get('mine')
