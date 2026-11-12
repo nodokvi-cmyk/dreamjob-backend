@@ -19,6 +19,7 @@ import {
 } from '../aws-s3/process-image.js';
 import { StoragePrefix } from '../aws-s3/storage-prefix.js';
 import { BookmarksService } from '../bookmarks/bookmarks.service.js';
+import { approvedCompanyIds } from '../companies/approved-company-ids.js';
 import { Company } from '../companies/schema/company.schema.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { NotificationType } from '../notifications/schema/notification.schema.js';
@@ -54,6 +55,14 @@ import {
   VacancyViewStatus,
   WorkMode,
 } from './schema/vacancy.schema.js';
+import {
+  cardSnapshotOf,
+  cardFields,
+  cardMarks,
+  type MyApplicationSummary,
+  type UserCardContext,
+  userVacancyCard,
+} from './vacancy-card.js';
 import { vacancyViewStatus } from './vacancy-status.js';
 
 type VacancyChanges = Partial<
@@ -148,24 +157,68 @@ export class VacanciesService {
       requirements: vacancy.requirements,
       deadline: vacancy.deadline,
       status: vacancyViewStatus(vacancy),
-      photos: vacancy.photoKeys.map((key) => ({
-        id: key.slice(PHOTO_KEY_PREFIX.length),
-        url: this.s3.publicUrl(key),
-      })),
+      photos: this.photosOf(vacancy),
       company: vacancy.company.toString(),
       createdAt: vacancy.createdAt,
     };
 
     if (!includePrivate) return response;
 
+    return { ...response, ...this.privateFields(vacancy) };
+  }
+
+  private photosOf(vacancy: VacancyRecord) {
+    return vacancy.photoKeys.map((key) => ({
+      id: key.slice(PHOTO_KEY_PREFIX.length),
+      url: this.s3.publicUrl(key),
+    }));
+  }
+
+  private privateFields(vacancy: VacancyRecord) {
     return {
-      ...response,
       rejectionReason: vacancy.rejectionReason ?? '',
       submittedAt: vacancy.submittedAt,
       firstPublishedAt: vacancy.firstPublishedAt,
       freeWindowEndsAt: vacancy.freeWindowEndsAt,
       updatedAt: vacancy.updatedAt,
     };
+  }
+
+  private privateCard(vacancy: VacancyRecord) {
+    return {
+      ...cardFields(vacancy, false),
+      status: vacancyViewStatus(vacancy),
+      ...this.privateFields(vacancy),
+    };
+  }
+
+  private async userContext(
+    vacancies: VacancyRecord[],
+    viewer: Viewer | null,
+  ): Promise<UserCardContext> {
+    const userId =
+      viewer?.accountRole === AuthRole.USER ? viewer.accountId : null;
+    const [approvedIds, bookmarked] = await Promise.all([
+      approvedCompanyIds(
+        this.companyModel,
+        vacancies.map(({ company }) => company),
+      ),
+      userId
+        ? this.bookmarks.bookmarkedIds(
+            userId,
+            vacancies.map(({ _id }) => _id),
+          )
+        : new Set<string>(),
+    ]);
+    const applications = userId
+      ? await this.applications.myApplicationsFor(
+          userId,
+          vacancies,
+          approvedIds,
+        )
+      : new Map<string, MyApplicationSummary>();
+
+    return { approvedIds, applications, bookmarked };
   }
 
   async create(
@@ -221,27 +274,45 @@ export class VacanciesService {
     }
   }
 
-  listPublic(query: VacancyFilterDto) {
+  async listPublic(query: VacancyFilterDto, viewer: Viewer | null) {
     const now = new Date();
     const filter = allOf(
       { status: VacancyStatus.PUBLISHED, deadline: { $gt: now } },
       this.buildFilter(query),
     );
 
-    return this.paginate(filter, query, false);
+    const { items, total } = await this.findPageAndCount(filter, query);
+    const context = await this.userContext(items, viewer);
+
+    return {
+      items: items.map((vacancy) => userVacancyCard(vacancy, context)),
+      total,
+      page: query.page,
+      take: query.take,
+    };
   }
 
-  listOwn(companyId: string, query: OwnVacanciesFilterDto) {
+  async listOwn(companyId: string, query: OwnVacanciesFilterDto) {
     const filter = allOf(
       { company: new Types.ObjectId(companyId) },
       this.statusFilter(query.status, new Date()),
       this.buildFilter(query),
     );
 
-    return this.paginate(filter, query, true);
+    const { items, total } = await this.findPageAndCount(filter, query);
+
+    return {
+      items: items.map((vacancy) => ({
+        ...this.privateCard(vacancy),
+        photos: this.photosOf(vacancy),
+      })),
+      total,
+      page: query.page,
+      take: query.take,
+    };
   }
 
-  listAll(query: AdminVacanciesFilterDto) {
+  async listAll(query: AdminVacanciesFilterDto) {
     const filter = allOf(
       { submittedAt: { $exists: true } },
       query.companyId ? { company: new Types.ObjectId(query.companyId) } : {},
@@ -249,7 +320,21 @@ export class VacanciesService {
       this.buildFilter(query),
     );
 
-    return this.paginate(filter, query, true);
+    const { items, total } = await this.findPageAndCount(filter, query);
+    const approvedIds = await approvedCompanyIds(
+      this.companyModel,
+      items.map(({ company }) => company),
+    );
+
+    return {
+      items: items.map((vacancy) => ({
+        ...this.privateCard(vacancy),
+        companyApproved: approvedIds.has(vacancy.company.toString()),
+      })),
+      total,
+      page: query.page,
+      take: query.take,
+    };
   }
 
   async findOne(id: string, viewer: Viewer | null) {
@@ -258,7 +343,12 @@ export class VacanciesService {
       .lean<VacancyRecord>();
     if (!vacancy) throw new NotFoundException('Vacancy not found');
 
-    return this.toResponse(vacancy, this.canSeePrivate(vacancy, viewer));
+    const context = await this.userContext([vacancy], viewer);
+
+    return {
+      ...this.toResponse(vacancy, this.canSeePrivate(vacancy, viewer)),
+      ...cardMarks(vacancy, context),
+    };
   }
 
   async update(
@@ -375,8 +465,14 @@ export class VacanciesService {
     const vacancy = await this.findReviewable(id, now);
 
     const set: Partial<
-      Pick<Vacancy, 'status' | 'firstPublishedAt' | 'freeWindowEndsAt'>
-    > = { status: VacancyStatus.PUBLISHED };
+      Pick<
+        Vacancy,
+        'status' | 'firstPublishedAt' | 'freeWindowEndsAt' | 'approvedCard'
+      >
+    > = {
+      status: VacancyStatus.PUBLISHED,
+      approvedCard: cardSnapshotOf(vacancy),
+    };
     const unset: VacancyUnsets = { rejectionReason: 1 };
 
     if (!vacancy.firstPublishedAt) {
@@ -772,22 +868,16 @@ export class VacanciesService {
     }
   }
 
-  private async paginate(
+  private async findPageAndCount(
     filter: VacancyFilter,
     { sort, page, take }: VacancyFilterDto,
-    includePrivate: boolean,
   ) {
     const [items, total] = await Promise.all([
       this.findPage(filter, sort, (page - 1) * take, take),
       this.vacancyModel.countDocuments(filter),
     ]);
 
-    return {
-      items: items.map((vacancy) => this.toResponse(vacancy, includePrivate)),
-      total,
-      page,
-      take,
-    };
+    return { items, total };
   }
 
   private async findPage(
