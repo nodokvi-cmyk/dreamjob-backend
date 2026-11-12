@@ -75,13 +75,15 @@ Response ids: a vacancy uses `id` (not `_id`).
 { id, title, excerpt, category, employmentType, workMode, location, salaryMin, salaryMax, currency, deadline, createdAt, company, status, companyApproved }
 ```
 
+(`companyApproved` is on every card except `GET /vacancies/mine`.)
+
 - `excerpt`: the start of the description, at most 250 characters, cut at a word boundary and ending with `...` (the whole text when it is shorter). Cards have no `description` and no `requirements`; the details page has them.
 - `salaryMin` and `salaryMax` are `null` when not set (the details page still leaves them out when not set).
 - `companyApproved: false`: show the warning "This company currently has no approved status" and the company name as plain text (its public page answers 404).
 
 Per list:
 - `GET /vacancies` (public): also `myApplication` and `isBookmarked` (below). `status` is always `published`. No photos.
-- `GET /vacancies/mine` (company): also `rejectionReason`, `submittedAt?`, `firstPublishedAt?`, `freeWindowEndsAt?`, `updatedAt`, and `photos` as `[{ id, url }]` (kept for the delete confirm, which counts them).
+- `GET /vacancies/mine` (company): no `companyApproved` (every card is the caller's own company; show one banner or icon at the top of the dashboard from `approved` on `GET /auth/me`, not a warning on each card). Also `rejectionReason`, `submittedAt?`, `firstPublishedAt?`, `freeWindowEndsAt?`, `updatedAt`, and `photos` as `[{ id, url }]` (kept for the delete confirm, which counts them).
 - `GET /vacancies/admin`: also `rejectionReason`, `submittedAt?`, `firstPublishedAt?`, `freeWindowEndsAt?`, `updatedAt`. No photos.
 
 `GET /vacancies/:id` still returns the full vacancy (photos, description, requirements, `status`) and now also `companyApproved`, `myApplication` and `isBookmarked`. Create, update, close, submit, extend, approve, reject, photo and delete responses keep the full vacancy without these three fields.
