@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { ApplicationsModule } from '../applications/applications.module.js';
 import { Company, companySchema } from '../companies/schema/company.schema.js';
 import { User, userSchema } from '../users/schema/user.schema.js';
 import { Vacancy, vacancySchema } from '../vacancies/schema/vacancy.schema.js';
@@ -15,6 +16,7 @@ import { Bookmark, bookmarkSchema } from './schema/bookmark.schema.js';
       { name: Company.name, schema: companySchema },
       { name: User.name, schema: userSchema },
     ]),
+    ApplicationsModule,
   ],
   controllers: [BookmarksController],
   providers: [BookmarksService],
