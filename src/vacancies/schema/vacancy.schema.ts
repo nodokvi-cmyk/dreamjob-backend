@@ -57,7 +57,7 @@ export enum Currency {
 export const MAX_VACANCY_PHOTOS = 3;
 
 @Schema({ _id: false })
-export class ApprovedVacancyCard {
+export class VacancyCardSnapshot {
   @Prop({ type: String, required: true })
   title!: string;
 
@@ -86,8 +86,8 @@ export class ApprovedVacancyCard {
   excerpt!: string;
 }
 
-export const approvedVacancyCardSchema =
-  SchemaFactory.createForClass(ApprovedVacancyCard);
+export const vacancyCardSnapshotSchema =
+  SchemaFactory.createForClass(VacancyCardSnapshot);
 
 @Schema({ timestamps: true })
 export class Vacancy {
@@ -158,8 +158,8 @@ export class Vacancy {
   @Prop({ type: String, required: false })
   checkoutSessionId?: string;
 
-  @Prop({ type: approvedVacancyCardSchema, required: false })
-  approvedCard?: ApprovedVacancyCard;
+  @Prop({ type: vacancyCardSnapshotSchema, required: false })
+  approvedCard?: VacancyCardSnapshot;
 
   declare readonly createdAt: Date;
   declare readonly updatedAt: Date;
