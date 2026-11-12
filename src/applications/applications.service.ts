@@ -13,6 +13,7 @@ import { assertPdf, PDF_CONTENT_TYPE } from '../aws-s3/assert-pdf.js';
 import { AwsS3Service } from '../aws-s3/aws-s3.service.js';
 import { StoragePrefix } from '../aws-s3/storage-prefix.js';
 import type { ApplicationFiles } from '../aws-s3/upload-file.js';
+import { approvedCompanyIds } from '../companies/approved-company-ids.js';
 import { Company } from '../companies/schema/company.schema.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { NotificationType } from '../notifications/schema/notification.schema.js';
@@ -29,7 +30,14 @@ import {
   VacancyRecord,
   VacancyStatus,
 } from '../vacancies/schema/vacancy.schema.js';
-import { vacancyStatusForUser } from '../vacancies/vacancy-status.js';
+import {
+  type MyApplicationSummary,
+  userFacingTitle,
+} from '../vacancies/vacancy-card.js';
+import {
+  HIDDEN_FROM_USERS_STATUSES,
+  vacancyStatusForUser,
+} from '../vacancies/vacancy-status.js';
 import {
   applicantAggregateOptions,
   applicantCountPipeline,
@@ -60,7 +68,23 @@ type ApplicationFilter = QueryFilter<Application>;
 
 type VacancySummarySource = Pick<
   VacancyRecord,
-  '_id' | 'title' | 'company' | 'deadline' | 'status' | 'submittedAt'
+  | '_id'
+  | 'title'
+  | 'company'
+  | 'deadline'
+  | 'status'
+  | 'submittedAt'
+  | 'approvedCard'
+>;
+
+type ReapplyState = Pick<
+  ApplicationRecord,
+  'status' | 'submissions' | 'locked'
+>;
+
+type ReapplyVacancy = Pick<
+  VacancyRecord,
+  'company' | 'deadline' | 'status' | 'submittedAt'
 >;
 
 type ApplicantUser = Pick<
@@ -72,7 +96,8 @@ type ApplicantRow = ApplicationRecord & { applicant?: ApplicantUser | null };
 
 const MAX_TITLE_SEARCH_WORDS = 5;
 
-const VACANCY_SUMMARY_PROJECTION = 'title company deadline status submittedAt';
+const VACANCY_SUMMARY_PROJECTION =
+  'title company deadline status submittedAt approvedCard';
 
 type StoredFiles = Partial<Pick<Application, 'cvKey' | 'coverLetterKey'>>;
 
@@ -307,19 +332,13 @@ export class ApplicationsService {
       .find({ _id: { $in: applications.map(({ vacancy }) => vacancy) } })
       .select(VACANCY_SUMMARY_PROJECTION)
       .lean<VacancySummarySource[]>();
-    const approvedCompanies = await this.companyModel
-      .find({
-        _id: { $in: vacancies.map(({ company }) => company) },
-        approved: true,
-      })
-      .select('_id')
-      .lean<{ _id: Types.ObjectId }[]>();
+    const approvedIds = await approvedCompanyIds(
+      this.companyModel,
+      vacancies.map(({ company }) => company),
+    );
 
     const vacancyById = new Map(
       vacancies.map((vacancy) => [vacancy._id.toString(), vacancy]),
-    );
-    const approvedIds = new Set(
-      approvedCompanies.map(({ _id }) => _id.toString()),
     );
 
     return {
@@ -339,6 +358,49 @@ export class ApplicationsService {
       page,
       take,
     };
+  }
+
+  async myApplicationsFor(
+    userId: string,
+    vacancies: readonly (ReapplyVacancy & { _id: Types.ObjectId })[],
+    approvedIds: ReadonlySet<string>,
+  ): Promise<Map<string, MyApplicationSummary>> {
+    if (vacancies.length === 0) return new Map();
+
+    const applications = await this.applicationModel
+      .find({
+        user: new Types.ObjectId(userId),
+        vacancy: { $in: vacancies.map(({ _id }) => _id) },
+      })
+      .select('vacancy status submissions locked')
+      .lean<(ReapplyState & Pick<ApplicationRecord, '_id' | 'vacancy'>)[]>();
+
+    const vacancyById = new Map(
+      vacancies.map((vacancy) => [vacancy._id.toString(), vacancy]),
+    );
+
+    return new Map(
+      applications.map((application) => {
+        const vacancyId = application.vacancy.toString();
+        const vacancy = vacancyById.get(vacancyId);
+
+        return [
+          vacancyId,
+          {
+            id: application._id.toString(),
+            status: application.status,
+            canReapply: vacancy
+              ? this.canReapply(
+                  application,
+                  vacancy,
+                  approvedIds.has(vacancy.company.toString()),
+                )
+              : false,
+            submissions: application.submissions,
+          },
+        ];
+      }),
+    );
   }
 
   async listApplicants(
@@ -394,7 +456,7 @@ export class ApplicationsService {
       .lean<Pick<ApplicationRecord, 'vacancy' | 'user' | 'status'>>();
     if (!application) throw new NotFoundException('Application not found');
 
-    const { vacancyTitle, companyName } = await this.assertManagedBy(
+    const { userVacancyTitle, companyName } = await this.assertManagedBy(
       application.vacancy,
       companyId,
     );
@@ -430,7 +492,7 @@ export class ApplicationsService {
         AuthRole.USER,
         {
           type: NotificationType.APPLICATION_STATUS_CHANGED,
-          data: { vacancyTitle, companyName, status },
+          data: { vacancyTitle: userVacancyTitle, companyName, status },
           target: {
             vacancyId: application.vacancy.toString(),
             applicationId: id,
@@ -570,11 +632,13 @@ export class ApplicationsService {
   private async assertManagedBy(
     vacancyId: string | Types.ObjectId,
     companyId: string,
-  ): Promise<{ vacancyTitle: string; companyName: string }> {
+  ): Promise<{ userVacancyTitle: string; companyName: string }> {
     const vacancy = await this.vacancyModel
       .findById(vacancyId)
-      .select('company title')
-      .lean<VacancyNotice>();
+      .select('company title status approvedCard')
+      .lean<
+        Pick<VacancyRecord, 'company' | 'title' | 'status' | 'approvedCard'>
+      >();
     if (!vacancy) throw new NotFoundException('Vacancy not found');
     if (vacancy.company.toString() !== companyId) {
       throw new ForbiddenException('No permission');
@@ -590,7 +654,10 @@ export class ApplicationsService {
       );
     }
 
-    return { vacancyTitle: vacancy.title, companyName: company.companyName };
+    return {
+      userVacancyTitle: userFacingTitle(vacancy),
+      companyName: company.companyName,
+    };
   }
 
   private async isManagedBy(
@@ -612,12 +679,31 @@ export class ApplicationsService {
     const appliedIds = await this.applicationModel.distinct('vacancy', {
       user,
     });
+    const patterns = words.map((word) => ({
+      $regex: wordStartPattern(word),
+      $options: 'i',
+    }));
+    const liveTitle = patterns.map((pattern) => ({ title: pattern }));
+    const approvedTitle = patterns.map((pattern) => ({
+      'approvedCard.title': pattern,
+    }));
+
     const matches = await this.vacancyModel
       .find({
         _id: { $in: appliedIds },
-        $and: words.map((word) => ({
-          title: { $regex: wordStartPattern(word), $options: 'i' },
-        })),
+        $or: [
+          { status: { $nin: HIDDEN_FROM_USERS_STATUSES }, $and: liveTitle },
+          {
+            status: { $in: HIDDEN_FROM_USERS_STATUSES },
+            approvedCard: { $exists: true },
+            $and: approvedTitle,
+          },
+          {
+            status: { $in: HIDDEN_FROM_USERS_STATUSES },
+            approvedCard: { $exists: false },
+            $and: liveTitle,
+          },
+        ],
       })
       .select('_id')
       .lean<{ _id: Types.ObjectId }[]>();
@@ -672,18 +758,29 @@ export class ApplicationsService {
       vacancy: vacancy
         ? {
             id: vacancy._id.toString(),
-            title: vacancy.title,
+            title: userFacingTitle(vacancy),
             company: vacancy.company.toString(),
             deadline: vacancy.deadline,
             status: vacancyStatus,
           }
         : null,
       companyApproved,
-      canReapply:
-        this.isReapplyAllowed(application) &&
-        vacancyStatus === VacancyStatus.PUBLISHED &&
-        companyApproved,
+      canReapply: vacancy
+        ? this.canReapply(application, vacancy, companyApproved)
+        : false,
     };
+  }
+
+  private canReapply(
+    application: ReapplyState,
+    vacancy: ReapplyVacancy,
+    companyApproved: boolean,
+  ): boolean {
+    return (
+      this.isReapplyAllowed(application) &&
+      vacancyStatusForUser(vacancy) === VacancyStatus.PUBLISHED &&
+      companyApproved
+    );
   }
 
   private toApplicantResponse(row: ApplicantRow) {
@@ -720,7 +817,7 @@ export class ApplicationsService {
     };
   }
 
-  private isReapplyAllowed(application: ApplicationRecord): boolean {
+  private isReapplyAllowed(application: ReapplyState): boolean {
     return (
       ENDED_APPLICATION_STATUSES.some(
         (status) => status === application.status,
