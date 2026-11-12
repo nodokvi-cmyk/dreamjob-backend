@@ -14,15 +14,19 @@ export function isNotSubmitted(
 
 export const UNAVAILABLE_VACANCY_STATUS = 'unavailable';
 
+export const HIDDEN_FROM_USERS_STATUSES = [
+  VacancyStatus.PENDING,
+  VacancyStatus.REJECTED,
+];
+
+export function isHiddenFromUsers(vacancy: Pick<Vacancy, 'status'>): boolean {
+  return HIDDEN_FROM_USERS_STATUSES.includes(vacancy.status);
+}
+
 export function vacancyStatusForUser(
   vacancy: Pick<Vacancy, 'status' | 'deadline' | 'submittedAt'>,
 ) {
-  if (
-    vacancy.status === VacancyStatus.PENDING ||
-    vacancy.status === VacancyStatus.REJECTED
-  ) {
-    return UNAVAILABLE_VACANCY_STATUS;
-  }
+  if (isHiddenFromUsers(vacancy)) return UNAVAILABLE_VACANCY_STATUS;
 
   return vacancyViewStatus(vacancy);
 }
