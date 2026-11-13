@@ -267,6 +267,12 @@ export class VacanciesService {
         company: new Types.ObjectId(companyId),
       });
 
+      const companyExists = await this.companyModel.exists({ _id: companyId });
+      if (!companyExists) {
+        await this.vacancyModel.deleteOne({ _id: vacancy._id });
+        throw new NotFoundException('Company not found');
+      }
+
       return this.toResponse(vacancy.toObject(), true);
     } catch (error: unknown) {
       await this.deleteFiles(photoKeys);

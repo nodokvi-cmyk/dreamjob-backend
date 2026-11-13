@@ -380,11 +380,11 @@ export class PaymentService {
     }
   }
 
-  async cancelSubscription(subscriptionId: string | undefined): Promise<void> {
-    if (!subscriptionId) return;
+  async deleteCustomer(customerId: string | undefined): Promise<void> {
+    if (!customerId) return;
 
     try {
-      await this.stripe.subscriptions.cancel(subscriptionId);
+      await this.stripe.customers.del(customerId);
     } catch (error: unknown) {
       if (
         error instanceof Stripe.errors.StripeError &&
@@ -393,11 +393,11 @@ export class PaymentService {
         return;
       }
       this.logger.error(
-        'Subscription was not cancelled',
+        'Stripe customer was not deleted',
         error instanceof Error ? error.stack : String(error),
       );
       throw new InternalServerErrorException(
-        'Could not cancel the plan, try again',
+        'Could not close the billing account, try again',
       );
     }
   }

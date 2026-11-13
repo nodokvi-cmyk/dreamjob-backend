@@ -248,11 +248,7 @@ export class ApplicationsService {
 
     if (!vacancyExists) {
       await this.applicationModel.deleteOne({ _id: application._id });
-      await this.deleteFiles([
-        application.cvKey,
-        application.coverLetterKey,
-        ...callKeys,
-      ]);
+      await this.deleteFiles(callKeys);
       throw new NotFoundException('Vacancy not found');
     }
 

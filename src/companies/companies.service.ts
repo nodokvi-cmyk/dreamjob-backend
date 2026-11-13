@@ -422,10 +422,10 @@ export class CompaniesService implements EmailChangeStore {
   async remove(id: string): Promise<CompanyDocument> {
     const billing = await this.companyModel
       .findById(id)
-      .select('+stripeSubscriptionId')
-      .lean<Pick<Company, 'stripeSubscriptionId'>>();
+      .select('+stripeCustomerId')
+      .lean<Pick<Company, 'stripeCustomerId'>>();
     if (!billing) throw new NotFoundException('Company not found');
-    await this.payment.cancelSubscription(billing.stripeSubscriptionId);
+    await this.payment.deleteCustomer(billing.stripeCustomerId);
 
     const company = await this.companyModel.findByIdAndDelete(id);
     if (!company) throw new NotFoundException('Company not found');
