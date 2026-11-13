@@ -205,6 +205,13 @@ export class ApplicationsService {
       throw error;
     }
 
+    await this.removeIfOrphaned(application, vacancyId, userId, [
+      stored.cvKey,
+      stored.coverLetterKey,
+      existing?.cvKey,
+      existing?.coverLetterKey,
+    ]);
+
     if (existing) {
       await this.deleteFiles([
         !keepPrevious || stored.cvKey ? existing.cvKey : undefined,
@@ -225,6 +232,33 @@ export class ApplicationsService {
     );
 
     return this.toResponse(application);
+  }
+
+  private async removeIfOrphaned(
+    application: ApplicationRecord,
+    vacancyId: string,
+    userId: string,
+    callKeys: (string | undefined)[],
+  ): Promise<void> {
+    const [vacancyExists, userExists] = await Promise.all([
+      this.vacancyModel.exists({ _id: vacancyId }),
+      this.userModel.exists({ _id: userId }),
+    ]);
+    if (vacancyExists && userExists) return;
+
+    if (!vacancyExists) {
+      await this.applicationModel.deleteOne({ _id: application._id });
+      await this.deleteFiles([
+        application.cvKey,
+        application.coverLetterKey,
+        ...callKeys,
+      ]);
+      throw new NotFoundException('Vacancy not found');
+    }
+
+    await this.detachUser(userId);
+    await this.deleteFiles(callKeys);
+    throw new NotFoundException('User not found');
   }
 
   async withdraw(id: string, userId: string) {
