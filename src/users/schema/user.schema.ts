@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument } from 'mongoose';
 import { OtpPurpose } from '../../shared/types/otp-purpose.js';
 
 export enum UserRole {
@@ -89,9 +89,6 @@ export class User {
 
   @Prop({ type: Boolean, default: false })
   isPhonePublic!: boolean;
-
-  @Prop({ type: [{ type: Types.ObjectId, ref: 'Vacancy' }], default: [] })
-  appliedVacancies!: Types.ObjectId[];
 
   declare readonly age: number | undefined;
 }
