@@ -380,6 +380,28 @@ export class PaymentService {
     }
   }
 
+  async cancelSubscription(subscriptionId: string | undefined): Promise<void> {
+    if (!subscriptionId) return;
+
+    try {
+      await this.stripe.subscriptions.cancel(subscriptionId);
+    } catch (error: unknown) {
+      if (
+        error instanceof Stripe.errors.StripeError &&
+        error.code === 'resource_missing'
+      ) {
+        return;
+      }
+      this.logger.error(
+        'Subscription was not cancelled',
+        error instanceof Error ? error.stack : String(error),
+      );
+      throw new InternalServerErrorException(
+        'Could not cancel the plan, try again',
+      );
+    }
+  }
+
   private async endPlanAfterFailedPayment(invoice: Stripe.Invoice) {
     const target = await this.findRenewalTarget(invoice);
     if (!target) return;

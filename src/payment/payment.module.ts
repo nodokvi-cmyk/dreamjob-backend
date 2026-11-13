@@ -33,6 +33,6 @@ import { VacancyBillingService } from './vacancy-billing.service.js';
         new Stripe(config.getOrThrow<string>('STRIPE_API_KEY')),
     },
   ],
-  exports: [VacancyBillingService],
+  exports: [PaymentService, VacancyBillingService],
 })
 export class PaymentModule {}
