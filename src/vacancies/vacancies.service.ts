@@ -19,7 +19,10 @@ import {
 } from '../aws-s3/process-image.js';
 import { StoragePrefix } from '../aws-s3/storage-prefix.js';
 import { BookmarksService } from '../bookmarks/bookmarks.service.js';
-import { approvedCompanyIds } from '../companies/approved-company-ids.js';
+import {
+  companyFieldsOf,
+  companySummaries,
+} from '../companies/company-summaries.js';
 import { Company } from '../companies/schema/company.schema.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { NotificationType } from '../notifications/schema/notification.schema.js';
@@ -198,9 +201,10 @@ export class VacanciesService {
   ): Promise<UserCardContext> {
     const userId =
       viewer?.accountRole === AuthRole.USER ? viewer.accountId : null;
-    const [approvedIds, bookmarked] = await Promise.all([
-      approvedCompanyIds(
+    const [companies, bookmarked] = await Promise.all([
+      companySummaries(
         this.companyModel,
+        this.s3,
         vacancies.map(({ company }) => company),
       ),
       userId
@@ -214,11 +218,11 @@ export class VacanciesService {
       ? await this.applications.myApplicationsFor(
           userId,
           vacancies,
-          approvedIds,
+          companies.approvedIds,
         )
       : new Map<string, MyApplicationSummary>();
 
-    return { approvedIds, applications, bookmarked };
+    return { companies, applications, bookmarked };
   }
 
   async create(
@@ -327,15 +331,17 @@ export class VacanciesService {
     );
 
     const { items, total } = await this.findPageAndCount(filter, query);
-    const approvedIds = await approvedCompanyIds(
+    const companies = await companySummaries(
       this.companyModel,
+      this.s3,
       items.map(({ company }) => company),
     );
 
     return {
       items: items.map((vacancy) => ({
         ...this.privateCard(vacancy),
-        companyApproved: approvedIds.has(vacancy.company.toString()),
+        ...companyFieldsOf(vacancy.company, companies),
+        companyApproved: companies.approvedIds.has(vacancy.company.toString()),
       })),
       total,
       page: query.page,
@@ -353,6 +359,7 @@ export class VacanciesService {
 
     return {
       ...this.toResponse(vacancy, this.canSeePrivate(vacancy, viewer)),
+      ...companyFieldsOf(vacancy.company, context.companies),
       ...cardMarks(vacancy, context),
     };
   }

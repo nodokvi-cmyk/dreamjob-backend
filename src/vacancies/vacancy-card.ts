@@ -1,4 +1,8 @@
 import type { ApplicationStatus } from '../applications/schema/application.schema.js';
+import {
+  type CompanySummaries,
+  companyFieldsOf,
+} from '../companies/company-summaries.js';
 import { excerpt } from '../shared/text/excerpt.js';
 import type {
   VacancyCardSnapshot,
@@ -37,7 +41,7 @@ export type MyApplicationSummary = {
 };
 
 export type UserCardContext = {
-  approvedIds: ReadonlySet<string>;
+  companies: CompanySummaries;
   applications: ReadonlyMap<string, MyApplicationSummary>;
   bookmarked: ReadonlySet<string>;
 };
@@ -113,7 +117,9 @@ export function cardMarks(
   const vacancyId = vacancy._id.toString();
 
   return {
-    companyApproved: context.approvedIds.has(vacancy.company.toString()),
+    companyApproved: context.companies.approvedIds.has(
+      vacancy.company.toString(),
+    ),
     myApplication: context.applications.get(vacancyId) ?? null,
     isBookmarked: context.bookmarked.has(vacancyId),
   };
@@ -125,6 +131,7 @@ export function userVacancyCard(
 ) {
   return {
     ...cardFields(vacancy, true),
+    ...companyFieldsOf(vacancy.company, context.companies),
     status: vacancyStatusForUser(vacancy),
     ...cardMarks(vacancy, context),
   };

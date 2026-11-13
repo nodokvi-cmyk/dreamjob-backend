@@ -2,6 +2,8 @@
 
 API contract for the GetDreamJob frontend. The backend is built in steps: build only what is listed here. When the backend adds routes, this file is updated first. Types in the frontend are hand-written from this file, not generated.
 
+**Backend status (2026-11-13):** everything in this file is built and pushed, including applications, bookmarks, notifications, billing and the light vacancy cards. Only the "Not built yet" list at the end is missing. The frontend `CLAUDE.md` line "Not in the backend yet: applications, saved jobs, payments, chatbot" is outdated: only the chatbot is missing. Build every screen this file describes that the frontend does not have yet, and update existing screens to the current response shapes (several sections below are marked as breaking changes).
+
 ## Brand
 
 The site name shown to people is **GetDreamJob** (domain `getdreamjob.vercel.app`). Use it in the logo, page titles, meta tags, headings, footer, copy and emails. The word "DreamJob" must not appear anywhere visible on the site. Folder, repo and package names may keep `dreamjob`.
@@ -73,10 +75,12 @@ Response ids: a vacancy uses `id` (not `_id`).
 `GET /vacancies`, `GET /vacancies/mine` and `GET /vacancies/admin` return light cards, not full vacancies. Every card has:
 
 ```
-{ id, title, excerpt, category, employmentType, workMode, location, salaryMin, salaryMax, currency, deadline, createdAt, company, status, companyApproved }
+{ id, title, excerpt, category, employmentType, workMode, location, salaryMin, salaryMax, currency, deadline, createdAt, company, companyName, logoUrl, status, companyApproved }
 ```
 
-(`companyApproved` is on every card except `GET /vacancies/mine`.)
+(`companyName`, `logoUrl` and `companyApproved` are on every card except `GET /vacancies/mine`, where every card is the caller's own company.)
+
+- `company` is the company id. `companyName` and `logoUrl` (`''` when there is no logo: show initials) come with it, so show the employer on every card and on the details page from these fields. Delete `useCompanyNames` and the `CompanyCard` fetch: they call `GET /companies/:id`, which is self or admin only, so visitors and users get 403. A revoked company still sends its name and logo; show the name as plain text (see `companyApproved` below).
 
 - `excerpt`: the start of the description, at most 250 characters, cut at a word boundary and ending with `...` (the whole text when it is shorter). Cards have no `description` and no `requirements`; the details page has them.
 - `salaryMin` and `salaryMax` are `null` when not set (the details page still leaves them out when not set).
@@ -87,7 +91,7 @@ Per list:
 - `GET /vacancies/mine` (company): no `companyApproved` (every card is the caller's own company; show one banner or icon at the top of the dashboard from `approved` on `GET /auth/me`, not a warning on each card). Also `rejectionReason`, `submittedAt?`, `firstPublishedAt?`, `freeWindowEndsAt?`, `updatedAt`, and `photos` as `[{ id, url }]` (kept for the delete confirm, which counts them).
 - `GET /vacancies/admin`: also `rejectionReason`, `submittedAt?`, `firstPublishedAt?`, `freeWindowEndsAt?`, `updatedAt`. No photos. Admin vacancies page: default the status filter to `pending` on first load, since pending vacancies are the admin's main work; clearing the filter (no `status`) shows all submitted vacancies.
 
-`GET /vacancies/:id` still returns the full vacancy (photos, description, requirements, `status`) and now also `companyApproved`, `myApplication` and `isBookmarked`. Create, update, close, submit, extend, approve, reject, photo and delete responses keep the full vacancy without these three fields.
+`GET /vacancies/:id` still returns the full vacancy (photos, description, requirements, `status`) and now also `companyName`, `logoUrl`, `companyApproved`, `myApplication` and `isBookmarked`. Create, update, close, submit, extend, approve, reject, photo and delete responses keep the full vacancy without these five fields.
 
 **`myApplication` and `isBookmarked`** (on public cards, bookmark cards and the details page):
 - `myApplication`: `{ id, status, canReapply, submissions }` or `null` when the user never applied. `canReapply` is true only when the application is `rejected` or `withdrawn`, it was the first submission, it is not locked, the vacancy is `published` (not expired) and the company is approved.
@@ -243,7 +247,7 @@ Account deletion: deleting a user keeps their applications for the company as "D
 ```
 {
   ...apply response fields,
-  vacancy: { id, title, company, deadline, status } | null,
+  vacancy: { id, title, company, companyName, logoUrl, deadline, status } | null,
   companyApproved,
   canReapply
 }
@@ -369,7 +373,7 @@ Only users bookmark; companies and admins get 403 on all three routes.
 {
   id,
   createdAt,
-  vacancy: { id, title, excerpt, category, employmentType, workMode, location, salaryMin, salaryMax, currency, deadline, createdAt, company, status, companyApproved, myApplication, isBookmarked } | null
+  vacancy: { id, title, excerpt, category, employmentType, workMode, location, salaryMin, salaryMax, currency, deadline, createdAt, company, companyName, logoUrl, status, companyApproved, myApplication, isBookmarked } | null
 }
 ```
 

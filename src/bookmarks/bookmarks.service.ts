@@ -2,7 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ApplicationsService } from '../applications/applications.service.js';
-import { approvedCompanyIds } from '../companies/approved-company-ids.js';
+import { AwsS3Service } from '../aws-s3/aws-s3.service.js';
+import { companySummaries } from '../companies/company-summaries.js';
 import { Company } from '../companies/schema/company.schema.js';
 import type { PaginationDto } from '../shared/dto/pagination.dto.js';
 import { isDuplicateKeyError } from '../shared/mongo/is-duplicate-key-error.js';
@@ -28,6 +29,7 @@ export class BookmarksService {
     @InjectModel(Company.name) private readonly companyModel: Model<Company>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
     private readonly applications: ApplicationsService,
+    private readonly s3: AwsS3Service,
   ) {}
 
   async add(vacancyId: string, userId: string) {
@@ -98,17 +100,18 @@ export class BookmarksService {
       .find({ _id: { $in: bookmarks.map(({ vacancy }) => vacancy) } })
       .select(VACANCY_CARD_PROJECTION)
       .lean<VacancyCardSource[]>();
-    const approvedIds = await approvedCompanyIds(
+    const companies = await companySummaries(
       this.companyModel,
+      this.s3,
       vacancies.map(({ company }) => company),
     );
     const applications = await this.applications.myApplicationsFor(
       userId,
       vacancies,
-      approvedIds,
+      companies.approvedIds,
     );
     const context: UserCardContext = {
-      approvedIds,
+      companies,
       applications,
       bookmarked: new Set(vacancies.map(({ _id }) => _id.toString())),
     };

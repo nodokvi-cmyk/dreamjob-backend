@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ApplicationsModule } from '../applications/applications.module.js';
+import { AwsS3Module } from '../aws-s3/aws-s3.module.js';
 import { Company, companySchema } from '../companies/schema/company.schema.js';
 import { User, userSchema } from '../users/schema/user.schema.js';
 import { Vacancy, vacancySchema } from '../vacancies/schema/vacancy.schema.js';
@@ -17,6 +18,7 @@ import { Bookmark, bookmarkSchema } from './schema/bookmark.schema.js';
       { name: User.name, schema: userSchema },
     ]),
     ApplicationsModule,
+    AwsS3Module,
   ],
   controllers: [BookmarksController],
   providers: [BookmarksService],

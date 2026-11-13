@@ -13,7 +13,11 @@ import { assertPdf, PDF_CONTENT_TYPE } from '../aws-s3/assert-pdf.js';
 import { AwsS3Service } from '../aws-s3/aws-s3.service.js';
 import { StoragePrefix } from '../aws-s3/storage-prefix.js';
 import type { ApplicationFiles } from '../aws-s3/upload-file.js';
-import { approvedCompanyIds } from '../companies/approved-company-ids.js';
+import {
+  type CompanySummary,
+  companyFieldsOf,
+  companySummaries,
+} from '../companies/company-summaries.js';
 import { Company } from '../companies/schema/company.schema.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { NotificationType } from '../notifications/schema/notification.schema.js';
@@ -362,8 +366,9 @@ export class ApplicationsService {
       .find({ _id: { $in: applications.map(({ vacancy }) => vacancy) } })
       .select(VACANCY_SUMMARY_PROJECTION)
       .lean<VacancySummarySource[]>();
-    const approvedIds = await approvedCompanyIds(
+    const companies = await companySummaries(
       this.companyModel,
+      this.s3,
       vacancies.map(({ company }) => company),
     );
 
@@ -375,12 +380,13 @@ export class ApplicationsService {
       items: applications.map((application) => {
         const vacancy = vacancyById.get(application.vacancy.toString());
         const companyApproved = vacancy
-          ? approvedIds.has(vacancy.company.toString())
+          ? companies.approvedIds.has(vacancy.company.toString())
           : false;
 
         return this.toMyApplicationResponse(
           application,
           vacancy,
+          vacancy ? companyFieldsOf(vacancy.company, companies) : undefined,
           companyApproved,
         );
       }),
@@ -779,6 +785,7 @@ export class ApplicationsService {
   private toMyApplicationResponse(
     application: ApplicationRecord,
     vacancy: VacancySummarySource | undefined,
+    company: CompanySummary | undefined,
     companyApproved: boolean,
   ) {
     const vacancyStatus = vacancy ? vacancyStatusForUser(vacancy) : null;
@@ -790,6 +797,8 @@ export class ApplicationsService {
             id: vacancy._id.toString(),
             title: userFacingTitle(vacancy),
             company: vacancy.company.toString(),
+            companyName: company?.companyName ?? '',
+            logoUrl: company?.logoUrl ?? '',
             deadline: vacancy.deadline,
             status: vacancyStatus,
           }
