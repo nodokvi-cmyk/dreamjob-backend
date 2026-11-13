@@ -19,6 +19,9 @@ Visible occurrences found in the frontend `src/` on 2026-11-04 (change each to G
 - Rate limit: 429 `Too Many Requests` (30 per minute per IP, 5 per minute on sensitive routes). Show a calm "try again in a minute".
 - Lists return `{ items, total, page, take }`. Query `page` (default 1), `take` (default 10, max 30).
 - Roles in the token: `user`, `admin`, `company`. `GET /auth/me` tells which one you are.
+- **Pictures (decided 2026-11-13):** `avatarUrl` (users) and `logoUrl` (companies) are `''` when nothing is uploaded. Two rules:
+  - **Vacancy cards and the vacancy details page** (main list, home latest block, bookmarks, the vacancy part of "My applications", admin list): show the company logo small only when `logoUrl` is not `''`. When it is `''`, show no logo and no placeholder, so that card is a bit thinner.
+  - **Everywhere else** (header avatar, user profile and public profile, company profile and public company page, applicant list, company dashboard): when `avatarUrl` or `logoUrl` is `''`, show a default picture: a grey square with a centered icon, a person for users and a company icon (briefcase or building) for companies. Build it as a small component with the existing lucide icons and the theme's muted colors (it follows dark mode); never upload default images and never use initials.
 
 ## Auth flow (users under `/auth/users/...`, companies under `/auth/companies/...`, same shapes)
 
@@ -80,7 +83,7 @@ Response ids: a vacancy uses `id` (not `_id`).
 
 (`companyName`, `logoUrl` and `companyApproved` are on every card except `GET /vacancies/mine`, where every card is the caller's own company.)
 
-- `company` is the company id. `companyName` and `logoUrl` (`''` when there is no logo: show initials) come with it, so show the employer on every card and on the details page from these fields. Delete `useCompanyNames` and the `CompanyCard` fetch: they call `GET /companies/:id`, which is self or admin only, so visitors and users get 403. A revoked company still sends its name and logo; show the name as plain text (see `companyApproved` below).
+- `company` is the company id. `companyName` and `logoUrl` (`''` when there is no logo: show no logo and a thinner card, see "Pictures" under Base) come with it, so show the employer on every card and on the details page from these fields. Delete `useCompanyNames` and the `CompanyCard` fetch: they call `GET /companies/:id`, which is self or admin only, so visitors and users get 403. A revoked company still sends its name and logo; show the name as plain text (see `companyApproved` below).
 
 - `excerpt`: the start of the description, at most 250 characters, cut at a word boundary and ending with `...` (the whole text when it is shorter). Cards have no `description` and no `requirements`; the details page has them.
 - `salaryMin` and `salaryMax` are `null` when not set (the details page still leaves them out when not set).
@@ -280,7 +283,7 @@ Response `{ items, total, page, take }`. Two item shapes, told apart by `hidden`
 
 - `hidden: true` is a withdrawn application or a deleted user. Show only the status ("Withdrawn" or "Deleted user") and the time, no link, no files, no status controls. `id` is the application's id, for the row key and `focus`.
 - `isReapply` is true on a second submission; then show `previousOutcome` and the reapply time (`appliedAt`) as the main time and `firstAppliedAt` in a quieter style.
-- `age` is `null` for applicants without a birth date: show nothing. `avatarUrl` is `''` when none: show initials. Small square avatar.
+- `age` is `null` for applicants without a birth date: show nothing. `avatarUrl` is `''` when none: show the default user picture (see "Pictures" under Base). Small square avatar.
 - `applicant.id` links to the public profile `GET /users/:id/public`. Application data (message, files, email, phone) is shown here whatever the user's profile switches say.
 - Use skeleton loaders while the list loads.
 
