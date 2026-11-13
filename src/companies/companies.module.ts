@@ -4,6 +4,7 @@ import { ApplicationsModule } from '../applications/applications.module.js';
 import { AwsS3Module } from '../aws-s3/aws-s3.module.js';
 import { EmailClaimsModule } from '../email-claims/email-claims.module.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
+import { PaymentModule } from '../payment/payment.module.js';
 import { CompaniesController } from './companies.controller.js';
 import { CompaniesService } from './companies.service.js';
 import { VacanciesModule } from '../vacancies/vacancies.module.js';
@@ -17,6 +18,7 @@ import { Company, companySchema } from './schema/company.schema.js';
     VacanciesModule,
     NotificationsModule,
     ApplicationsModule,
+    PaymentModule,
   ],
   controllers: [CompaniesController],
   providers: [CompaniesService],

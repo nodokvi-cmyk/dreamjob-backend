@@ -16,6 +16,7 @@ import { EmailClaimsService } from '../email-claims/email-claims.service.js';
 import { ApplicationsService } from '../applications/applications.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { NotificationType } from '../notifications/schema/notification.schema.js';
+import { PaymentService } from '../payment/payment.service.js';
 import { hashChangedPassword } from '../shared/crypto/change-password.js';
 import { ChangePasswordDto } from '../shared/dto/change-password.dto.js';
 import { PaginationDto } from '../shared/dto/pagination.dto.js';
@@ -50,6 +51,7 @@ export class CompaniesService implements EmailChangeStore {
     private readonly vacancies: VacanciesService,
     private readonly notifications: NotificationsService,
     private readonly applications: ApplicationsService,
+    private readonly payment: PaymentService,
   ) {}
 
   toResponse(company: CompanyDocument) {
@@ -418,11 +420,17 @@ export class CompaniesService implements EmailChangeStore {
   }
 
   async remove(id: string): Promise<CompanyDocument> {
-    await this.vacancies.removeAllByCompany(id);
+    const billing = await this.companyModel
+      .findById(id)
+      .select('+stripeSubscriptionId')
+      .lean<Pick<Company, 'stripeSubscriptionId'>>();
+    if (!billing) throw new NotFoundException('Company not found');
+    await this.payment.cancelSubscription(billing.stripeSubscriptionId);
 
     const company = await this.companyModel.findByIdAndDelete(id);
     if (!company) throw new NotFoundException('Company not found');
 
+    await this.vacancies.removeAllByCompany(id);
     await this.emailClaims.releaseAll(id);
     await this.notifications.removeForRecipient(id, AuthRole.COMPANY);
     await this.s3.deleteQuietly(company.logoKey);
