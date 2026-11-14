@@ -265,7 +265,7 @@ export class VacanciesService {
         salaryMin: salaryMin ?? undefined,
         salaryMax: salaryMax ?? undefined,
         currency,
-        requirements,
+        requirements: requirements ?? [],
         deadline,
         photoKeys,
         company: new Types.ObjectId(companyId),
