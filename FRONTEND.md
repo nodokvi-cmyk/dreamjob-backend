@@ -416,7 +416,7 @@ Only role `user` creates and manages publications; admins review them. Companies
 | `PATCH /publications/:id/cover-letter` | owner | multipart, field `coverLetter` | the publication |
 | `DELETE /publications/:id/cv`, `/cover-letter` | owner | none | the publication |
 | `GET /publications/:id/cv`, `/cover-letter` | owner or admin | none | `{ url, expiresIn }` (presigned, 300 s) |
-| `GET /publications/admin` | admin | `page`, `take`, `status` (default `pending`), `sort` | `{ items, total, page, take }` |
+| `GET /publications/admin` | admin | `page`, `take`, `status`, `sort` | `{ items, total, page, take }` |
 | `PATCH /publications/:id/approve` | admin | none | the publication |
 | `PATCH /publications/:id/reject` | admin | `{ reason? }` (max 1000) | the publication |
 
@@ -449,10 +449,10 @@ Only role `user` creates and manages publications; admins review them. Companies
 
 **Close and delete:** "Close" (any status except closed) ends the publication for good and frees its slot; it stays in the list as closed. "Delete" removes it and its files at once; ask "Delete this publication and its CV and cover letter?" first. Deleting the account deletes all publications.
 
-**Admin review page:** list `GET /publications/admin` (pending first by default; the `status` filter shows others). Each item has `user` (the user id) for a link to `/users/:id/public`. The admin can open the CV and cover letter to check for scams. Approve and reject only work on `pending` (400 otherwise, 404 when it no longer exists, 409 "Publication changed, try again" when the user edited it at the same moment: reload). The user gets a bell notification for both.
+**Admin review page:** list `GET /publications/admin`. With no `status` it returns publications in every status, like `GET /vacancies/admin`; the admin page must default its filter to `pending` on first load (send `status=pending` and keep it in the page URL) and let the admin switch to the others. Each item has `user` (the user id) for a link to `/users/:id/public`. The admin can open the CV and cover letter to check for scams. Approve and reject only work on `pending` (400 otherwise, 404 when it no longer exists, 409 "Publication changed, try again" when the user edited it at the same moment: reload). The user gets a bell notification for both.
 
 **Admin: queue and account history.** Show these in two places, using the same list routes:
-- **Admin panel (moderation queue):** `GET /vacancies/admin` and `GET /publications/admin`, pending first. Approve and reject here.
+- **Admin panel (moderation queue):** `GET /vacancies/admin` and `GET /publications/admin`, both with `status=pending` set by the page on first load (neither route defaults to it). Approve and reject here.
 - **An account's profile, admin view (history):** add a "Vacancies" tab on a company's profile and a "Publications" tab on a user's profile, listing every existing item of that account in any status (deleted ones are gone). Companies work now: `GET /vacancies/admin?companyId=<id>` (drafts stay hidden from admins). Users' publications: the `userId` filter is coming in phase 2, `GET /publications/admin?userId=<id>`, which returns all that user's publications in every status when no `status` is sent; do not build that tab until the filter is documented as built. Each item carries its owner id (`company` on vacancies, `user` on publications), so the queue can link to the profile and the tab can link back to the item.
 
 **Errors:** 404 `Publication not found`, 403 `No permission` (another user's publication), 409 `Publication changed, try again` (edited in another tab at the same moment: reload), 404 `User not found` (the account was deleted).
