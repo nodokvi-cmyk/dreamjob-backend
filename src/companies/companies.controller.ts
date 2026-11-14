@@ -46,7 +46,7 @@ export class CompaniesController {
     };
   }
 
-  @Get(':id/public')
+  @Get(':id/profile')
   getPublicProfile(@Param() { id }: IsValidMongoIdDto) {
     return this.companiesService.getPublicProfile(id);
   }

@@ -60,7 +60,7 @@ export class UsersController {
     return this.usersService.toResponse(await this.usersService.findOne(id));
   }
 
-  @Get(':id/public')
+  @Get(':id/profile')
   @UseGuards(OptionalAuthGuard)
   getPublicProfile(
     @Param() { id }: IsValidMongoIdDto,
