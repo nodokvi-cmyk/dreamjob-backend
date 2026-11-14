@@ -6,6 +6,7 @@ import { BookmarksModule } from '../bookmarks/bookmarks.module.js';
 import { CompaniesModule } from '../companies/companies.module.js';
 import { EmailClaimsModule } from '../email-claims/email-claims.module.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
+import { PublicationsModule } from '../publications/publications.module.js';
 import { UsersService } from './users.service.js';
 import { UsersController } from './users.controller.js';
 import { User, userSchema } from './schema/user.schema.js';
@@ -19,6 +20,7 @@ import { User, userSchema } from './schema/user.schema.js';
     ApplicationsModule,
     BookmarksModule,
     NotificationsModule,
+    PublicationsModule,
   ],
   controllers: [UsersController],
   providers: [UsersService],

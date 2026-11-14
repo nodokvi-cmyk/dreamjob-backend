@@ -18,6 +18,7 @@ import { BookmarksService } from '../bookmarks/bookmarks.service.js';
 import { CompaniesService } from '../companies/companies.service.js';
 import { EmailClaimsService } from '../email-claims/email-claims.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { PublicationsService } from '../publications/publications.service.js';
 import { hashChangedPassword } from '../shared/crypto/change-password.js';
 import { ChangePasswordDto } from '../shared/dto/change-password.dto.js';
 import { PaginationDto } from '../shared/dto/pagination.dto.js';
@@ -40,6 +41,7 @@ export class UsersService implements EmailChangeStore {
     private readonly applications: ApplicationsService,
     private readonly bookmarks: BookmarksService,
     private readonly notifications: NotificationsService,
+    private readonly publications: PublicationsService,
   ) {}
 
   toResponse(user: UserDocument) {
@@ -464,6 +466,7 @@ export class UsersService implements EmailChangeStore {
     await this.emailClaims.releaseAll(id);
     await this.applications.detachUser(id);
     await this.bookmarks.removeForUser(id);
+    await this.publications.removeForUser(id);
     await this.notifications.removeForRecipient(id, AuthRole.USER);
     await Promise.all([
       this.s3.deleteQuietly(user.avatarKey),
