@@ -24,6 +24,17 @@ export const applicationUploadLimits = {
   files: 2,
 };
 
+export const publicationFileLimits = {
+  fileSize: MAX_APPLICATION_FILE_BYTES,
+  files: 1,
+};
+
+export const publicationFilePipe = new ParseFilePipe({
+  validators: [
+    new MaxFileSizeValidator({ maxSize: MAX_APPLICATION_FILE_BYTES }),
+  ],
+});
+
 export interface ApplicationFiles {
   cv?: Express.Multer.File[];
   coverLetter?: Express.Multer.File[];
