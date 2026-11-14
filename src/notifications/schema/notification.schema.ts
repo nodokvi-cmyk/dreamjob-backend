@@ -14,6 +14,8 @@ export enum NotificationType {
   PLAN_PAYMENT_ACTION_REQUIRED = 'planPaymentActionRequired',
   APPLICATION_STATUS_CHANGED = 'applicationStatusChanged',
   APPLICANT_COMPANY_REVOKED = 'applicantCompanyRevoked',
+  PUBLICATION_APPROVED = 'publicationApproved',
+  PUBLICATION_REJECTED = 'publicationRejected',
 }
 
 export const NOTIFICATION_RECIPIENT_ROLES = [
@@ -45,6 +47,9 @@ export class NotificationData {
 
   @Prop({ type: Boolean, required: false })
   isReapply?: boolean;
+
+  @Prop({ type: String, required: false })
+  publicationTitle?: string;
 }
 
 export const notificationDataSchema =
@@ -57,6 +62,9 @@ export class NotificationTarget {
 
   @Prop({ type: Types.ObjectId, required: false })
   applicationId?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, required: false })
+  publicationId?: Types.ObjectId;
 }
 
 export const notificationTargetSchema =
