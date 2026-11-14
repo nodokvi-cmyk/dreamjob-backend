@@ -43,6 +43,7 @@ export type NotificationInput = {
   target?: {
     vacancyId?: string;
     applicationId?: string;
+    publicationId?: string;
   };
 };
 
@@ -319,6 +320,7 @@ export class NotificationsService {
       target: {
         vacancyId: notification.target?.vacancyId?.toString() ?? null,
         applicationId: notification.target?.applicationId?.toString() ?? null,
+        publicationId: notification.target?.publicationId?.toString() ?? null,
       },
       locked: !expiresAt,
       expiresAt: expiresAt ?? null,
@@ -344,11 +346,17 @@ export class NotificationsService {
   }
 
   private toTarget(target: NotificationInput['target']) {
-    if (!target || (!target.vacancyId && !target.applicationId)) {
+    if (
+      !target ||
+      (!target.vacancyId && !target.applicationId && !target.publicationId)
+    ) {
       return undefined;
     }
 
     return {
+      ...(target.publicationId
+        ? { publicationId: new Types.ObjectId(target.publicationId) }
+        : {}),
       ...(target.vacancyId
         ? { vacancyId: new Types.ObjectId(target.vacancyId) }
         : {}),
