@@ -426,10 +426,10 @@ Only role `user` creates and manages publications; admins review them. Companies
 - `locations`: up to 10 cities or regions, each max 128. `skills`: up to 20, each max 50.
 - `salaryMin`, `salaryMax`: optional desired range (min not above max), `currency` (`USD` default, `GEL`, `EUR`). On edit `null` removes a salary.
 - `experienceYears`: optional whole number 0 to 60. On edit `null` removes it.
-- `contactEmail`, `contactPhone`: optional, shown to every approved company once the board exists. Pre-fill them in the form from the user's profile email and phone only when those profile fields are public (`isEmailPublic`, `isPhonePublic`); the user may type other values. They are a copy: changing the profile later does not change the publication. `''` clears one.
+- There are no contact fields on a publication. Companies never see the user's email or phone from a publication; they invite, and the user's profile email and phone become visible to that company only when the user accepts the invitation (it creates an application, as for any application). Tell the user this in the publication form: "Companies can invite you; your email and phone are shared only if you accept".
 - Edits use the same fields; send only what changes. Empty strings for `title`, `about` and `category` answer 400; arrays sent empty clear the list.
 
-**Item:** `{ id, user, title, about, category, employmentTypes, workModes, locations, salaryMin, salaryMax, currency, skills, experienceYears, contactEmail, contactPhone, acceptingInvites, hasCv, hasCoverLetter, status, expiresAt, createdAt, rejectionReason, timerPaused, updatedAt }`. `salaryMin`, `salaryMax`, `experienceYears` and `expiresAt` are `null` when not set; `rejectionReason` is `''` when none.
+**Item:** `{ id, user, title, about, category, employmentTypes, workModes, locations, salaryMin, salaryMax, currency, skills, experienceYears, acceptingInvites, hasCv, hasCoverLetter, status, expiresAt, createdAt, rejectionReason, timerPaused, updatedAt }`. `salaryMin`, `salaryMax`, `experienceYears` and `expiresAt` are `null` when not set; `rejectionReason` is `''` when none.
 
 **Status:** `pending` (waiting for admin review), `published`, `rejected` (show `rejectionReason` when not empty), `closed` (final), `expired` (its 60 days ran out). There is no draft and no submit step: a new publication goes straight to `pending`.
 - Editing a `published` or `rejected` publication, or uploading a CV or cover letter, sends it back to `pending` for a new review. Removing a file sends only a `rejected` one back. Show a short note before saving: "Changes need a new admin review; meanwhile companies cannot see this publication".
@@ -450,6 +450,10 @@ Only role `user` creates and manages publications; admins review them. Companies
 **Close and delete:** "Close" (any status except closed) ends the publication for good and frees its slot; it stays in the list as closed. "Delete" removes it and its files at once; ask "Delete this publication and its CV and cover letter?" first. Deleting the account deletes all publications.
 
 **Admin review page:** list `GET /publications/admin` (pending first by default; the `status` filter shows others). Each item has `user` (the user id) for a link to `/users/:id/public`. The admin can open the CV and cover letter to check for scams. Approve and reject only work on `pending` (400 otherwise, 404 when it no longer exists, 409 "Publication changed, try again" when the user edited it at the same moment: reload). The user gets a bell notification for both.
+
+**Admin: queue and account history.** Show these in two places, using the same list routes:
+- **Admin panel (moderation queue):** `GET /vacancies/admin` and `GET /publications/admin`, pending first. Approve and reject here.
+- **An account's profile, admin view (history):** add a "Vacancies" tab on a company's profile and a "Publications" tab on a user's profile, listing every existing item of that account in any status (deleted ones are gone). Companies work now: `GET /vacancies/admin?companyId=<id>` (drafts stay hidden from admins). Users' publications: the `userId` filter is coming in phase 2, `GET /publications/admin?userId=<id>`, which returns all that user's publications in every status when no `status` is sent; do not build that tab until the filter is documented as built. Each item carries its owner id (`company` on vacancies, `user` on publications), so the queue can link to the profile and the tab can link back to the item.
 
 **Errors:** 404 `Publication not found`, 403 `No permission` (another user's publication), 409 `Publication changed, try again` (edited in another tab at the same moment: reload), 404 `User not found` (the account was deleted).
 
