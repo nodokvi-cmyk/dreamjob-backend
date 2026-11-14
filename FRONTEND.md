@@ -314,9 +314,9 @@ A bell in the header for users and companies. Admins get 403 on every route. The
 | `DELETE /notifications` | none | `{ deleted }` (number removed) |
 
 **Item:** `{ id, type, read, createdAt, data, target, locked, expiresAt, lockedAt, daysLeft, hoursLeft }`.
-- `type`: one of the ten below. Build the sentence from `type` and `data`.
-- `data`: a snapshot taken when the notification was made, so it stays readable after the vacancy or company changes or is deleted. Only the fields a type needs are present: `vacancyTitle`, `companyName`, `status`, `reason`, `planName`, `isReapply`. `{}` when none.
-- `target`: `{ vacancyId, applicationId }`, each a string or `null`. The target may be deleted by now; a 404 when opening it is normal (show a short "This item no longer exists" message).
+- `type`: one of the twelve below. Build the sentence from `type` and `data`.
+- `data`: a snapshot taken when the notification was made, so it stays readable after the vacancy, publication or company changes or is deleted. Only the fields a type needs are present: `vacancyTitle`, `companyName`, `status`, `reason`, `planName`, `isReapply`, `publicationTitle`. `{}` when none.
+- `target`: `{ vacancyId, applicationId, publicationId }`, each a string or `null`. The target may be deleted by now; a 404 when opening it is normal (show a short "This item no longer exists" message).
 
 **Types.** Who gets it, when, which fields are present, and where a click goes. The suggested sentences are examples; keep them short.
 
@@ -332,6 +332,8 @@ A bell in the header for users and companies. Admins get 403 on every route. The
 | `planPaymentActionRequired` | company | a plan renewal needs the bank's confirmation (3D Secure); the company has 5 days, and if it does not confirm, `planEnded` follows | `planName` | none | `/company/billing` | "Your bank needs a confirmation for your Plus renewal. Check your email within 5 days to keep your plan." |
 | `applicationStatusChanged` | user | a company moves the user's application to `interview`, `accepted` or `rejected` (never for `viewed`) | `vacancyTitle`, `companyName`, `status` | `vacancyId`, `applicationId` | the vacancy detail (`/vacancies/:vacancyId`); once a "My applications" page exists, that page with the application highlighted | "Acme moved your application for Frontend Developer to interview" |
 | `applicantCompanyRevoked` | user | an admin revokes a company the user has an active (not withdrawn) application with; one notice per revoke, however many of its vacancies the user applied to | `companyName` | none | "My applications" when that page exists, otherwise nothing (mark read only) | "Acme is no longer approved; your applications to it are on hold" |
+| `publicationApproved` | user | an admin approves the user's publication (new or edited) | `publicationTitle` | `publicationId` | the user's publication detail | "Your publication Frontend Developer is published" |
+| `publicationRejected` | user | an admin rejects the user's publication | `publicationTitle`, `reason` (only when the admin gave one) | `publicationId` | the user's publication detail | "Your publication Frontend Developer was not approved: <reason>" |
 
 Approving an already approved company or revoking an already revoked one creates nothing. A company approved, revoked, approved and revoked again gets a notice each time.
 
@@ -342,13 +344,13 @@ Approving an already approved company or revoking an already revoked one creates
 
 | Tone | Color | Types |
 |---|---|---|
-| Positive | green | `vacancyApproved`, `companyApproved`, `applicationStatusChanged` with `status` `interview` or `accepted` |
-| Needs attention | amber | `vacancyRejected`, `companyRevoked`, `planEnded`, `planPaymentActionRequired`, `applicantCompanyRevoked`, `applicationStatusChanged` with `status` `rejected` |
+| Positive | green | `vacancyApproved`, `companyApproved`, `publicationApproved`, `applicationStatusChanged` with `status` `interview` or `accepted` |
+| Needs attention | amber | `vacancyRejected`, `companyRevoked`, `planEnded`, `planPaymentActionRequired`, `applicantCompanyRevoked`, `publicationRejected`, `applicationStatusChanged` with `status` `rejected` |
 | Info | neutral (the theme's muted color) | `newApplication`, `applicationWithdrawn` |
 
-Each type also gets its own icon shape, so items differ even within one tone (lucide names): `newApplication` inbox, `applicationWithdrawn` undo, `vacancyApproved` and `companyApproved` check, `vacancyRejected` x, `companyRevoked` and `applicantCompanyRevoked` shield-off, `planEnded` credit-card, `planPaymentActionRequired` triangle-alert, `applicationStatusChanged` calendar for `interview`, check for `accepted`, x for `rejected`.
+Each type also gets its own icon shape, so items differ even within one tone (lucide names): `newApplication` inbox, `applicationWithdrawn` undo, `vacancyApproved`, `companyApproved` and `publicationApproved` check, `vacancyRejected` and `publicationRejected` x, `companyRevoked` and `applicantCompanyRevoked` shield-off, `planEnded` credit-card, `planPaymentActionRequired` triangle-alert, `applicationStatusChanged` calendar for `interview`, check for `accepted`, x for `rejected`.
 
-**Emails.** Some events also send an email; the bell notification is created either way. Emailed: `companyApproved`, `companyRevoked`, `applicationStatusChanged`, `planEnded` only after a payment failure (a failed renewal or a 3D Secure confirmation that was not made in time; a cancellation the company chose gets the bell only), and `planPaymentActionRequired` (the email carries the confirmation link; the bell notice only points to billing and the email). Not emailed: `vacancyApproved`, `vacancyRejected`, `newApplication`, `applicationWithdrawn`, `applicantCompanyRevoked`. The email buttons link to these frontend pages, so keep them working: `/dashboard` (company approved or revoked), `/vacancies/:id` (application status), `/company/billing` (plan ended).
+**Emails.** Some events also send an email; the bell notification is created either way. Emailed: `companyApproved`, `companyRevoked`, `applicationStatusChanged`, `planEnded` only after a payment failure (a failed renewal or a 3D Secure confirmation that was not made in time; a cancellation the company chose gets the bell only), and `planPaymentActionRequired` (the email carries the confirmation link; the bell notice only points to billing and the email). Not emailed: `vacancyApproved`, `vacancyRejected`, `newApplication`, `applicationWithdrawn`, `applicantCompanyRevoked`, `publicationApproved`, `publicationRejected`. The email buttons link to these frontend pages, so keep them working: `/dashboard` (company approved or revoked), `/vacancies/:id` (application status), `/company/billing` (plan ended).
 
 **Badge.** Red circle on the bell with `unseenCount`: notifications created since the bell was last opened. The number is capped at 100, so show `99+` when it is above 99, and hide the circle at 0. Call `GET /notifications/badge` on page load and refresh it every 5 minutes, only while the browser tab is visible (every call is a backend function run, so do not poll faster). When the user opens the bell, call `PATCH /notifications/seen` and hide the circle. The badge has nothing to do with read state.
 
@@ -392,6 +394,67 @@ Breaking change: `vacancy` is now the same light card as the public list (see "L
 - Deleting the user account deletes the bookmarks.
 - Use skeleton loaders while the list loads.
 
+## Publications (job seekers' "looking for a job" posts)
+
+A user publishes a post saying what job they are looking for; an admin reviews it; later, approved companies will browse published posts and invite the user to one of their vacancies. Free for users. Built so far: the user side and admin review. Not built yet: the company board and invitations (do not build those screens).
+
+Only role `user` creates and manages publications; admins review them. Companies get 403 on every route for now.
+
+**Routes (owner = the user who created it):**
+
+| Route | Who | Body / query | Returns |
+|---|---|---|---|
+| `POST /publications` | user | JSON, fields below | the publication |
+| `GET /publications/mine` | user | `page`, `take`, `status`, `sort` (`date`, `-date`, default `-date`) | `{ items, total, page, take }` |
+| `GET /publications/:id` | owner or admin | none | the publication (another user: 403) |
+| `PATCH /publications/:id` | owner | JSON, any fields below | the publication |
+| `PATCH /publications/:id/accepting-invites` | owner | `{ acceptingInvites: true \| false }` | the publication |
+| `PATCH /publications/:id/close` | owner | none | the publication |
+| `POST /publications/:id/extend` | owner | none | the publication |
+| `DELETE /publications/:id` | owner | none | the deleted publication |
+| `PATCH /publications/:id/cv` | owner | multipart, field `cv` | the publication |
+| `PATCH /publications/:id/cover-letter` | owner | multipart, field `coverLetter` | the publication |
+| `DELETE /publications/:id/cv`, `/cover-letter` | owner | none | the publication |
+| `GET /publications/:id/cv`, `/cover-letter` | owner or admin | none | `{ url, expiresIn }` (presigned, 300 s) |
+| `GET /publications/admin` | admin | `page`, `take`, `status` (default `pending`), `sort` | `{ items, total, page, take }` |
+| `PATCH /publications/:id/approve` | admin | none | the publication |
+| `PATCH /publications/:id/reject` | admin | `{ reason? }` (max 1000) | the publication |
+
+**Fields (create and edit):**
+- `title` (required, max 128), `about` (required, max 3000 characters and 500 words), `category` (required, free text, max 64).
+- `employmentTypes` (`full-time`, `part-time`, `internship`, `temporary`) and `workModes` (`remote`, `onsite`, `hybrid`): arrays, any number, no duplicates; empty means "any".
+- `locations`: up to 10 cities or regions, each max 128. `skills`: up to 20, each max 50.
+- `salaryMin`, `salaryMax`: optional desired range (min not above max), `currency` (`USD` default, `GEL`, `EUR`). On edit `null` removes a salary.
+- `experienceYears`: optional whole number 0 to 60. On edit `null` removes it.
+- `contactEmail`, `contactPhone`: optional, shown to every approved company once the board exists. Pre-fill them in the form from the user's profile email and phone only when those profile fields are public (`isEmailPublic`, `isPhonePublic`); the user may type other values. They are a copy: changing the profile later does not change the publication. `''` clears one.
+- Edits use the same fields; send only what changes. Empty strings for `title`, `about` and `category` answer 400; arrays sent empty clear the list.
+
+**Item:** `{ id, user, title, about, category, employmentTypes, workModes, locations, salaryMin, salaryMax, currency, skills, experienceYears, contactEmail, contactPhone, acceptingInvites, hasCv, hasCoverLetter, status, expiresAt, createdAt, rejectionReason, timerPaused, updatedAt }`. `salaryMin`, `salaryMax`, `experienceYears` and `expiresAt` are `null` when not set; `rejectionReason` is `''` when none.
+
+**Status:** `pending` (waiting for admin review), `published`, `rejected` (show `rejectionReason` when not empty), `closed` (final), `expired` (its 60 days ran out). There is no draft and no submit step: a new publication goes straight to `pending`.
+- Editing a `published` or `rejected` publication, or uploading a CV or cover letter, sends it back to `pending` for a new review. Removing a file sends only a `rejected` one back. Show a short note before saving: "Changes need a new admin review; meanwhile companies cannot see this publication".
+- On a `rejected` publication, tell the user to edit and resend it, or delete it to free a slot.
+- `closed` and `expired` publications cannot be edited (400). Expired ones must be extended first.
+
+**Limit: 3 active publications.** `pending`, `published` and `rejected` count; `closed`, `expired` and deleted ones do not. Creating a fourth, or extending an expired one while 3 others are active, answers 400 "You can have at most 3 active publications. Close or delete one first". Show the count (for example "2 of 3 active") on the "My publications" page and disable "New publication" at 3.
+
+**Lifetime: 60 days, free to extend.**
+- The 60 days start when an admin first approves it; `expiresAt` is the end date. Show "Visible until <expiresAt>" on published ones.
+- While an edited publication waits for review (or was rejected after an edit), the timer is paused: `timerPaused: true`. Show "Timer paused during review" instead of the date. The paused time is added back when it is approved again.
+- `POST /publications/:id/extend` works on `published` and `expired` ones (400 otherwise) and sets `expiresAt` to 60 days from now. Offer "Extend" on expired publications and on published ones close to the end.
+
+**Accepting invites:** `acceptingInvites` (default `true`) is a switch for later: when off, companies will not see the publication on the board. It does not need a review. Show it as a toggle on the publication.
+
+**Files:** CV and cover letter are PDFs up to 2 MB, one file per request (`cv` or `coverLetter` field). A new upload replaces the old file. Open them through the `GET` routes, inline in a new tab, the same way as application files. Errors: 400 `Only PDF files are allowed`, 413 when over 2 MB, 404 `CV not found` / `Cover letter not found` when removing a file that is not there, 404 `File not found` when opening one that does not exist.
+
+**Close and delete:** "Close" (any status except closed) ends the publication for good and frees its slot; it stays in the list as closed. "Delete" removes it and its files at once; ask "Delete this publication and its CV and cover letter?" first. Deleting the account deletes all publications.
+
+**Admin review page:** list `GET /publications/admin` (pending first by default; the `status` filter shows others). Each item has `user` (the user id) for a link to `/users/:id/public`. The admin can open the CV and cover letter to check for scams. Approve and reject only work on `pending` (400 otherwise, 404 when it no longer exists, 409 "Publication changed, try again" when the user edited it at the same moment: reload). The user gets a bell notification for both.
+
+**Errors:** 404 `Publication not found`, 403 `No permission` (another user's publication), 409 `Publication changed, try again` (edited in another tab at the same moment: reload), 404 `User not found` (the account was deleted).
+
+Use skeleton loaders on the lists.
+
 ## Not built yet (do not build screens for these)
 
-Chatbot, a list of a company's vacancies on its public page (open and past; the page itself and `GET /companies/:id/public` exist), a billing history list inside the site (use the portal), Stripe payments for anything except plans, vacancy submits and vacancy extensions.
+The publications board for companies and invitations (phases 2 and 3), chatbot, a list of a company's vacancies on its public page (open and past; the page itself and `GET /companies/:id/public` exist), a billing history list inside the site (use the portal), Stripe payments for anything except plans, vacancy submits and vacancy extensions.
