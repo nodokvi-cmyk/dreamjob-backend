@@ -165,7 +165,11 @@ const relevanceScore = (words: string[]): Record<string, unknown> => ({
           $cond: [
             {
               $anyElementTrue: {
-                $map: { input: '$skills', as: 'skill', in: matches('$$skill') },
+                $map: {
+                  input: { $ifNull: ['$skills', []] },
+                  as: 'skill',
+                  in: matches('$$skill'),
+                },
               },
             },
             SKILL_RELEVANCE,
