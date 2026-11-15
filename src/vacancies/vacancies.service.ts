@@ -905,7 +905,7 @@ export class VacanciesService {
         { $addFields: { topPay: { $ifNull: ['$salaryMax', '$salaryMin'] } } },
         {
           $addFields: {
-            hasSalary: { $cond: [{ $eq: ['$topPay', null] }, 0, 1] },
+            hasSalary: { $cond: [{ $isNumber: '$topPay' }, 1, 0] },
           },
         },
         {
