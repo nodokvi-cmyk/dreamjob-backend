@@ -111,6 +111,16 @@ type OptionalFields = Partial<
 
 type ApplicationKeys = Pick<ApplicationRecord, 'cvKey' | 'coverLetterKey'>;
 
+type SubmitInput = {
+  userId: string;
+  vacancyId: string;
+  existing: ApplicationRecord | null;
+  stored: StoredFiles;
+  message: string | undefined;
+  keepPrevious: boolean;
+  viaInvitation: boolean;
+};
+
 const FILE_KEYS_PROJECTION = 'cvKey coverLetterKey';
 
 const NOTIFIED_STATUS_CHANGES: readonly ApplicationStatus[] = [
@@ -145,6 +155,7 @@ export class ApplicationsService {
       hasCoverLetter: Boolean(application.coverLetterKey),
       submissions: application.submissions,
       locked: application.locked,
+      viaInvitation: application.viaInvitation ?? false,
       previousOutcome: application.previousOutcome ?? null,
       appliedAt: application.appliedAt,
       firstAppliedAt: application.firstAppliedAt,
@@ -192,18 +203,90 @@ export class ApplicationsService {
       cvFile,
       coverLetterFile,
     );
-    const fields: OptionalFields = {
-      message: dto.message || undefined,
-      ...stored,
-    };
 
-    const keepPrevious = dto.keepPrevious === true;
+    const application = await this.submit({
+      userId,
+      vacancyId,
+      existing,
+      stored,
+      message: dto.message || undefined,
+      keepPrevious: dto.keepPrevious === true,
+      viaInvitation: false,
+    });
+
+    await this.notifications.notify(
+      vacancy.company.toString(),
+      AuthRole.COMPANY,
+      {
+        type: NotificationType.NEW_APPLICATION,
+        data: { vacancyTitle: vacancy.title, isReapply: Boolean(existing) },
+        target: { vacancyId, applicationId: application._id.toString() },
+      },
+    );
+
+    return this.toResponse(application);
+  }
+
+  async applyFromInvitation(
+    vacancyId: string,
+    userId: string,
+    sources: StoredFiles,
+  ): Promise<{
+    application: ReturnType<ApplicationsService['toResponse']>;
+    created: boolean;
+  }> {
+    const userExists = await this.userModel.exists({ _id: userId });
+    if (!userExists) throw new NotFoundException('User not found');
+
+    await this.assertOpenForApplications(vacancyId);
+
+    const existing = await this.applicationModel
+      .findOne({ user: userId, vacancy: vacancyId })
+      .lean<ApplicationRecord>();
+    if (
+      existing &&
+      WITHDRAWABLE_APPLICATION_STATUSES.includes(existing.status)
+    ) {
+      return { application: this.toResponse(existing), created: false };
+    }
+    if (existing && !this.isReapplyAllowed(existing)) {
+      throw new ConflictException(this.conflictMessage(existing));
+    }
+
+    const stored = await this.settleFiles(
+      this.copyKey(sources.cvKey),
+      this.copyKey(sources.coverLetterKey),
+    );
+
+    const application = await this.submit({
+      userId,
+      vacancyId,
+      existing,
+      stored,
+      message: undefined,
+      keepPrevious: false,
+      viaInvitation: true,
+    });
+
+    return { application: this.toResponse(application), created: true };
+  }
+
+  private async submit({
+    userId,
+    vacancyId,
+    existing,
+    stored,
+    message,
+    keepPrevious,
+    viaInvitation,
+  }: SubmitInput): Promise<ApplicationRecord> {
+    const fields: OptionalFields = { message, ...stored };
 
     let application: ApplicationRecord;
     try {
       application = existing
-        ? await this.reapply(existing, fields, keepPrevious)
-        : await this.create(userId, vacancyId, fields);
+        ? await this.reapply(existing, fields, keepPrevious, viaInvitation)
+        : await this.create(userId, vacancyId, fields, viaInvitation);
     } catch (error: unknown) {
       await this.deleteFiles([stored.cvKey, stored.coverLetterKey]);
       throw error;
@@ -225,17 +308,7 @@ export class ApplicationsService {
       ]);
     }
 
-    await this.notifications.notify(
-      vacancy.company.toString(),
-      AuthRole.COMPANY,
-      {
-        type: NotificationType.NEW_APPLICATION,
-        data: { vacancyTitle: vacancy.title, isReapply: Boolean(existing) },
-        target: { vacancyId, applicationId: application._id.toString() },
-      },
-    );
-
-    return this.toResponse(application);
+    return application;
   }
 
   private async removeIfOrphaned(
@@ -839,6 +912,7 @@ export class ApplicationsService {
       appliedAt: row.appliedAt,
       firstAppliedAt: row.firstAppliedAt,
       isReapply: row.submissions === MAX_APPLICATION_SUBMISSIONS,
+      viaInvitation: row.viaInvitation ?? false,
       previousOutcome: row.previousOutcome ?? null,
       message: row.message ?? '',
       hasCv: Boolean(row.cvKey),
@@ -876,6 +950,7 @@ export class ApplicationsService {
     userId: string,
     vacancyId: string,
     fields: OptionalFields,
+    viaInvitation: boolean,
   ): Promise<ApplicationRecord> {
     try {
       const now = new Date();
@@ -883,6 +958,7 @@ export class ApplicationsService {
         user: new Types.ObjectId(userId),
         vacancy: new Types.ObjectId(vacancyId),
         ...fields,
+        viaInvitation,
         appliedAt: now,
         firstAppliedAt: now,
       });
@@ -900,6 +976,7 @@ export class ApplicationsService {
     existing: ApplicationRecord,
     fields: OptionalFields,
     keepPrevious: boolean,
+    viaInvitation: boolean,
   ): Promise<ApplicationRecord> {
     const previousOutcome =
       existing.status === ApplicationStatus.REJECTED
@@ -932,6 +1009,7 @@ export class ApplicationsService {
             status: ApplicationStatus.SUBMITTED,
             submissions: MAX_APPLICATION_SUBMISSIONS,
             previousOutcome,
+            viaInvitation,
             appliedAt: new Date(),
           },
           ...(Object.keys(missing).length > 0 ? { $unset: missing } : {}),
@@ -951,11 +1029,23 @@ export class ApplicationsService {
     cvFile: Express.Multer.File | undefined,
     coverLetterFile: Express.Multer.File | undefined,
   ): Promise<StoredFiles> {
-    const [cv, coverLetter] = await Promise.allSettled([
-      profileCvKey
-        ? this.s3.copy(profileCvKey, StoragePrefix.CVS)
-        : this.uploadPdf(cvFile),
+    return this.settleFiles(
+      profileCvKey ? this.copyKey(profileCvKey) : this.uploadPdf(cvFile),
       this.uploadPdf(coverLetterFile),
+    );
+  }
+
+  private async copyKey(key: string | undefined): Promise<string | undefined> {
+    return key ? this.s3.copy(key, StoragePrefix.CVS) : undefined;
+  }
+
+  private async settleFiles(
+    cvTask: Promise<string | undefined>,
+    coverLetterTask: Promise<string | undefined>,
+  ): Promise<StoredFiles> {
+    const [cv, coverLetter] = await Promise.allSettled([
+      cvTask,
+      coverLetterTask,
     ]);
     const cvKey = cv.status === 'fulfilled' ? cv.value : undefined;
     const coverLetterKey =
