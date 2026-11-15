@@ -396,17 +396,18 @@ Breaking change: `vacancy` is now the same light card as the public list (see "L
 
 ## Publications (job seekers' "looking for a job" posts)
 
-A user publishes a post saying what job they are looking for; an admin reviews it; later, approved companies will browse published posts and invite the user to one of their vacancies. Free for users. Built so far: the user side and admin review. Not built yet: the company board and invitations (do not build those screens).
+A user publishes a post saying what job they are looking for; an admin reviews it; later, approved companies will browse published posts and invite the user to one of their vacancies. Free for users. Built so far: the user side, admin review and the company board (browse, open, files). Not built yet: invitations (do not build the Invite button or the invitation inbox).
 
-Only role `user` creates and manages publications; admins review them. Companies get 403 on every route for now.
+Only role `user` creates and manages publications; admins review them. Approved companies browse the board and open publications and their files (read only); every other publication route answers 403 for companies.
 
 **Routes (owner = the user who created it):**
 
 | Route | Who | Body / query | Returns |
 |---|---|---|---|
 | `POST /publications` | user | JSON, fields below | the publication |
+| `GET /publications` | approved company or admin | board query, see "Company board" | `{ items, total, page, take }` (cards) |
 | `GET /publications/mine` | user | `page`, `take`, `status`, `sort` (`date`, `-date`, default `-date`) | `{ items, total, page, take }` |
-| `GET /publications/:id` | owner or admin | none | the publication (another user: 403) |
+| `GET /publications/:id` | owner, admin, or approved company | none | the publication (another user: 403; a company gets the company view, see "Company board") |
 | `PATCH /publications/:id` | owner | JSON, any fields below | the publication |
 | `PATCH /publications/:id/accepting-invites` | owner | `{ acceptingInvites: true \| false }` | the publication |
 | `PATCH /publications/:id/close` | owner | none | the publication |
@@ -415,8 +416,8 @@ Only role `user` creates and manages publications; admins review them. Companies
 | `PATCH /publications/:id/cv` | owner | multipart, field `cv` | the publication |
 | `PATCH /publications/:id/cover-letter` | owner | multipart, field `coverLetter` | the publication |
 | `DELETE /publications/:id/cv`, `/cover-letter` | owner | none | the publication |
-| `GET /publications/:id/cv`, `/cover-letter` | owner or admin | none | `{ url, expiresIn }` (presigned, 300 s) |
-| `GET /publications/admin` | admin | `page`, `take`, `status`, `sort` | `{ items, total, page, take }` |
+| `GET /publications/:id/cv`, `/cover-letter` | owner, admin, or approved company | none | `{ url, expiresIn }` (presigned, 300 s) |
+| `GET /publications/admin` | admin | `page`, `take`, `status`, `sort`, `userId` | `{ items, total, page, take }` |
 | `PATCH /publications/:id/approve` | admin | none | the publication |
 | `PATCH /publications/:id/reject` | admin | `{ reason? }` (max 1000) | the publication |
 
@@ -443,7 +444,7 @@ Only role `user` creates and manages publications; admins review them. Companies
 - While an edited publication waits for review (or was rejected after an edit), the timer is paused: `timerPaused: true`. Show "Timer paused during review" instead of the date. The paused time is added back when it is approved again.
 - `POST /publications/:id/extend` works on `published` and `expired` ones (400 otherwise) and sets `expiresAt` to 60 days from now. Offer "Extend" on expired publications and on published ones close to the end.
 
-**Accepting invites:** `acceptingInvites` (default `true`) is the user's own visibility switch, changed with `PATCH /publications/:id/accepting-invites`. When it is off, the publication disappears from the company board (the board comes in phase 2) and no invites can come in; the owner still sees it in their own list. It needs no review. It changes nothing else: `status`, `expiresAt` and `timerPaused` stay as they are, and the 60-day timer keeps running while the publication is hidden. Show it as a toggle on the publication, next to the status badge. Do not confuse it with `timerPaused`, which only means the lifetime timer is stopped while an edit waits for admin review. The wording and design of the toggle are up to the frontend.
+**Accepting invites:** `acceptingInvites` (default `true`) is the user's own visibility switch, changed with `PATCH /publications/:id/accepting-invites`. When it is off, the publication disappears from the company board, companies can no longer open it or its files (404), and no invites can come in; the owner still sees it in their own list. It needs no review. It changes nothing else: `status`, `expiresAt` and `timerPaused` stay as they are, and the 60-day timer keeps running while the publication is hidden. Show it as a toggle on the publication, next to the status badge. Do not confuse it with `timerPaused`, which only means the lifetime timer is stopped while an edit waits for admin review. The wording and design of the toggle are up to the frontend.
 
 **Creating a publication (one form, several requests).** The form shows the text fields, the CV and the cover letter on one screen with one "Create" button, but the backend takes them in separate requests, because of Vercel's request size limit:
 1. `POST /publications` with the JSON fields.
@@ -458,7 +459,16 @@ Show a single "Saving..." state for the whole sequence. If an upload fails, the 
 
 **Admin: queue and account history.** Show these in two places, using the same list routes:
 - **Admin panel (moderation queue):** `GET /vacancies/admin` and `GET /publications/admin`, both with `status=pending` set by the page on first load (neither route defaults to it). Approve and reject here.
-- **An account's profile, admin view (history):** add a "Vacancies" tab on a company's profile and a "Publications" tab on a user's profile, listing every existing item of that account in any status (deleted ones are gone). Companies work now: `GET /vacancies/admin?companyId=<id>` (drafts stay hidden from admins). Users' publications: the `userId` filter is coming in phase 2, `GET /publications/admin?userId=<id>`, which returns all that user's publications in every status when no `status` is sent; do not build that tab until the filter is documented as built. Each item carries its owner id (`company` on vacancies, `user` on publications), so the queue can link to the profile and the tab can link back to the item.
+- **An account's profile, admin view (history):** add a "Vacancies" tab on a company's profile and a "Publications" tab on a user's profile, listing every existing item of that account in any status (deleted ones are gone). Companies work now: `GET /vacancies/admin?companyId=<id>` (drafts stay hidden from admins). Users' publications: `GET /publications/admin?userId=<id>` returns all that user's publications in every status when no `status` is sent (built). Each item carries its owner id (`company` on vacancies, `user` on publications), so the queue can link to the profile and the tab can link back to the item.
+
+**Company board (approved companies and admins).** `GET /publications` lists publications that are `published`, not expired and have `acceptingInvites` on. An unapproved company gets 403 `Company is not approved` (show the same "waiting for approval" banner as elsewhere); users get 403.
+- Query: `page`, `take`, `q` (each word must start a word in the title, the about text or a skill; up to 5 words), `category` (exact, any case), `location` (word start in any of the preferred locations), `workMode`, `employmentType` (a publication with an empty list means "any" and matches every value), `salaryMin`, `salaryMax`, `currency`, `sort`. Salary works like the vacancy filters: overlapping ranges match, and publications without a salary are left out when a salary filter is sent.
+- `sort`: `-date` (default, newest first), `date`, `salary`, `-salary` (by the top of the desired range, else its bottom), `experience`, `-experience` (by `experienceYears`). Publications without a salary, or without experience years, go last in both directions.
+- Card: `{ id, title, excerpt, category, employmentTypes, workModes, locations, salaryMin, salaryMax, currency, skills, experienceYears, hasCv, hasCoverLetter, expiresAt, createdAt, author, invitation }`. `excerpt` is the first 250 characters of `about`, cut at a word, with `...` when shortened. `salaryMin`, `salaryMax`, `experienceYears` are `null` when not set.
+- `author` is `{ id, firstName, lastName, avatarUrl }` (`avatarUrl` is `''` when none; `author` is `null` in the rare case the account was just deleted). Link the name to `/users/:id/profile`, which applies the user's own privacy switches.
+- `invitation`: the state between the viewing company and this publication. Always `'none'` until invitations are built (phase 3 adds `invited`, `declined`, `accepted`); do not show an Invite button yet. Admins always get `'none'`.
+- Company detail: `GET /publications/:id` for an approved company works only while the publication is on the board (published, not expired, accepting invites); otherwise 404 `Publication not found`, and an unapproved company gets 403 `Company is not approved`. It returns the item without `rejectionReason`, `timerPaused` and `updatedAt`, plus `author` and `invitation`. The CV and cover letter links follow the same rule (404 `File not found` otherwise, also for an unapproved company). Open them inline in a new tab.
+- No email or phone anywhere on the board or the detail (see Fields). Use skeleton loaders on the board cards.
 
 **Errors:** 404 `Publication not found`, 403 `No permission` (another user's publication), 409 `Publication changed, try again` (edited in another tab at the same moment: reload), 404 `User not found` (the account was deleted).
 
@@ -466,4 +476,4 @@ Use skeleton loaders on the lists.
 
 ## Not built yet (do not build screens for these)
 
-The publications board for companies and invitations (phases 2 and 3), chatbot, a list of a company's vacancies on its public page (open and past; the page itself and `GET /companies/:id/profile` exist), a billing history list inside the site (use the portal), Stripe payments for anything except plans, vacancy submits and vacancy extensions.
+Publication invitations (phase 3: Invite button, invitation inbox, accept and decline), chatbot, a list of a company's vacancies on its public page (open and past; the page itself and `GET /companies/:id/profile` exist), a billing history list inside the site (use the portal), Stripe payments for anything except plans, vacancy submits and vacancy extensions.
