@@ -10,8 +10,15 @@ import { Model, QueryFilter, Types, UpdateQuery } from 'mongoose';
 import { assertPdf, PDF_CONTENT_TYPE } from '../aws-s3/assert-pdf.js';
 import { AwsS3Service } from '../aws-s3/aws-s3.service.js';
 import { StoragePrefix } from '../aws-s3/storage-prefix.js';
+import { Company } from '../companies/schema/company.schema.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { NotificationType } from '../notifications/schema/notification.schema.js';
+import {
+  exactPattern,
+  searchWords,
+  wordStartPattern,
+} from '../shared/mongo/search-patterns.js';
+import { excerpt } from '../shared/text/excerpt.js';
 import { AuthRole } from '../shared/types/auth-role.js';
 import type { Viewer } from '../shared/types/viewer.js';
 import { User } from '../users/schema/user.schema.js';
@@ -21,6 +28,9 @@ import {
 } from '../vacancies/schema/vacancy.schema.js';
 import { CreatePublicationDto } from './dto/create-publication.dto.js';
 import {
+  AdminPublicationsFilterDto,
+  PublicationBoardFilterDto,
+  PublicationBoardSort,
   PublicationListSort,
   PublicationStatusFilterDto,
 } from './dto/publication-filter.dto.js';
@@ -80,6 +90,40 @@ type ResubmitChanges = {
 
 type PublicationKeys = Pick<PublicationRecord, 'cvKey' | 'coverLetterKey'>;
 
+type PublicationFileAccess = Pick<
+  PublicationRecord,
+  | 'user'
+  | 'cvKey'
+  | 'coverLetterKey'
+  | 'status'
+  | 'acceptingInvites'
+  | 'expiresAt'
+>;
+
+type BoardVisibility = Pick<
+  Publication,
+  'status' | 'acceptingInvites' | 'expiresAt'
+>;
+
+type PublicationAuthor = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  avatarUrl: string;
+};
+
+type BoardSortPlan =
+  | { ranked: false; order: Record<string, 1 | -1> }
+  | {
+      ranked: true;
+      value: string | Record<string, unknown>;
+      direction: 1 | -1;
+    };
+
+const NO_INVITATION = 'none';
+const MAX_SEARCH_WORDS = 5;
+const TOP_PAY = { $ifNull: ['$salaryMax', '$salaryMin'] };
+
 const RESUBMIT_STATUSES: readonly PublicationStatus[] = [
   PublicationStatus.PUBLISHED,
   PublicationStatus.REJECTED,
@@ -89,10 +133,49 @@ const SORTS: Record<PublicationListSort, Record<string, 1 | -1>> = {
   date: { createdAt: 1 },
   '-date': { createdAt: -1 },
 };
+const BOARD_SORTS: Record<PublicationBoardSort, BoardSortPlan> = {
+  date: { ranked: false, order: SORTS.date },
+  '-date': { ranked: false, order: SORTS['-date'] },
+  salary: { ranked: true, value: TOP_PAY, direction: 1 },
+  '-salary': { ranked: true, value: TOP_PAY, direction: -1 },
+  experience: { ranked: true, value: '$experienceYears', direction: 1 },
+  '-experience': { ranked: true, value: '$experienceYears', direction: -1 },
+};
 const FILE_LABELS: Record<PublicationFileField, string> = {
   cvKey: 'CV',
   coverLetterKey: 'Cover letter',
 };
+
+const TITLE_RELEVANCE = 3;
+const SKILL_RELEVANCE = 2;
+const ABOUT_RELEVANCE = 1;
+
+const relevanceScore = (words: string[]): Record<string, unknown> => ({
+  $add: words.map((word) => {
+    const regex = wordStartPattern(word);
+    const matches = (input: unknown) => ({
+      $regexMatch: { input, regex, options: 'i' },
+    });
+
+    return {
+      $cond: [
+        matches('$title'),
+        TITLE_RELEVANCE,
+        {
+          $cond: [
+            {
+              $anyElementTrue: {
+                $map: { input: '$skills', as: 'skill', in: matches('$$skill') },
+              },
+            },
+            SKILL_RELEVANCE,
+            { $cond: [matches('$about'), ABOUT_RELEVANCE, 0] },
+          ],
+        },
+      ],
+    };
+  }),
+});
 
 const allOf = (...filters: PublicationFilter[]): PublicationFilter => {
   const used = filters.filter((filter) => Object.keys(filter).length > 0);
@@ -106,6 +189,7 @@ export class PublicationsService {
     @InjectModel(Publication.name)
     private readonly publicationModel: Model<Publication>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
+    @InjectModel(Company.name) private readonly companyModel: Model<Company>,
     private readonly s3: AwsS3Service,
     private readonly notifications: NotificationsService,
   ) {}
@@ -204,13 +288,54 @@ export class PublicationsService {
     return this.listPage(filter, query);
   }
 
-  async listForAdmin(query: PublicationStatusFilterDto) {
-    const filter = this.statusFilter(query.status, new Date());
+  async listForAdmin(query: AdminPublicationsFilterDto) {
+    const filter = allOf(
+      query.userId ? { user: new Types.ObjectId(query.userId) } : {},
+      this.statusFilter(query.status, new Date()),
+    );
 
     return this.listPage(filter, query);
   }
 
+  async listBoard(query: PublicationBoardFilterDto, viewer: Viewer) {
+    if (viewer.accountRole === AuthRole.COMPANY) {
+      await this.assertCompanyApproved(viewer.accountId);
+    }
+
+    const { page, take } = query;
+    const filter = allOf(
+      this.boardFilter(new Date()),
+      this.buildBoardFilter(query),
+    );
+
+    const relevanceWords =
+      query.q && !query.sort ? searchWords(query.q, MAX_SEARCH_WORDS) : [];
+
+    const [items, total] = await Promise.all([
+      this.findBoardPage(
+        filter,
+        query.sort,
+        relevanceWords,
+        (page - 1) * take,
+        take,
+      ),
+      this.publicationModel.countDocuments(filter),
+    ]);
+    const authors = await this.authorsOf(items);
+
+    return {
+      items: items.map((publication) => this.toCard(publication, authors)),
+      total,
+      page,
+      take,
+    };
+  }
+
   async findOne(id: string, viewer: Viewer) {
+    if (viewer.accountRole === AuthRole.COMPANY) {
+      return this.findForCompany(id, viewer.accountId);
+    }
+
     const publication = await this.publicationModel
       .findById(id)
       .lean<PublicationRecord>();
@@ -443,16 +568,14 @@ export class PublicationsService {
   async fileUrl(id: string, viewer: Viewer, field: PublicationFileField) {
     const publication = await this.publicationModel
       .findById(id)
-      .select('user cvKey coverLetterKey')
-      .lean<Pick<PublicationRecord, 'user' | 'cvKey' | 'coverLetterKey'>>();
+      .select('user cvKey coverLetterKey status acceptingInvites expiresAt')
+      .lean<PublicationFileAccess>();
     const key = publication?.[field];
     if (!publication || !key) throw new NotFoundException('File not found');
 
-    const allowed =
-      viewer.accountRole === AuthRole.ADMIN ||
-      (viewer.accountRole === AuthRole.USER &&
-        publication.user.toString() === viewer.accountId);
-    if (!allowed) throw new NotFoundException('File not found');
+    if (!(await this.canOpenFiles(publication, viewer))) {
+      throw new NotFoundException('File not found');
+    }
 
     return this.s3.presignedUrl(key);
   }
@@ -544,6 +667,237 @@ export class PublicationsService {
 
     await this.publicationModel.deleteMany(filter);
     await this.deleteFiles(publications);
+  }
+
+  private async findForCompany(id: string, companyId: string) {
+    await this.assertCompanyApproved(companyId);
+
+    const publication = await this.publicationModel
+      .findOne({ _id: id, ...this.boardFilter(new Date()) })
+      .lean<PublicationRecord>();
+    if (!publication) throw new NotFoundException('Publication not found');
+
+    const authors = await this.authorsOf([publication]);
+
+    return {
+      ...this.toResponse(publication, false),
+      author: authors.get(publication.user.toString()) ?? null,
+      invitation: NO_INVITATION,
+    };
+  }
+
+  private toCard(
+    publication: PublicationRecord,
+    authors: Map<string, PublicationAuthor>,
+  ) {
+    return {
+      id: publication._id.toString(),
+      title: publication.title,
+      excerpt: excerpt(publication.about),
+      category: publication.category,
+      employmentTypes: publication.employmentTypes,
+      workModes: publication.workModes,
+      locations: publication.locations,
+      salaryMin: publication.salaryMin ?? null,
+      salaryMax: publication.salaryMax ?? null,
+      currency: publication.currency,
+      skills: publication.skills,
+      experienceYears: publication.experienceYears ?? null,
+      hasCv: Boolean(publication.cvKey),
+      hasCoverLetter: Boolean(publication.coverLetterKey),
+      expiresAt: publication.expiresAt ?? null,
+      createdAt: publication.createdAt,
+      author: authors.get(publication.user.toString()) ?? null,
+      invitation: NO_INVITATION,
+    };
+  }
+
+  private async authorsOf(
+    publications: PublicationRecord[],
+  ): Promise<Map<string, PublicationAuthor>> {
+    const ids = [
+      ...new Set(
+        publications.map((publication) => publication.user.toString()),
+      ),
+    ];
+    if (ids.length === 0) return new Map();
+
+    const users = await this.userModel
+      .find({ _id: { $in: ids } })
+      .select('firstName lastName avatarKey');
+
+    return new Map(
+      users.map((user) => [
+        user._id.toString(),
+        {
+          id: user._id.toString(),
+          firstName: user.firstName,
+          lastName: user.lastName,
+          avatarUrl: this.s3.publicUrl(user.avatarKey),
+        },
+      ]),
+    );
+  }
+
+  private boardFilter(now: Date): PublicationFilter {
+    return {
+      status: PublicationStatus.PUBLISHED,
+      acceptingInvites: true,
+      expiresAt: { $gt: now },
+    };
+  }
+
+  private isOnBoard(publication: BoardVisibility, now: Date): boolean {
+    return (
+      publication.status === PublicationStatus.PUBLISHED &&
+      publication.acceptingInvites &&
+      publication.expiresAt !== undefined &&
+      publication.expiresAt.getTime() > now.getTime()
+    );
+  }
+
+  private buildBoardFilter({
+    q,
+    category,
+    location,
+    workMode,
+    employmentType,
+    salaryMin,
+    salaryMax,
+    currency,
+  }: PublicationBoardFilterDto): PublicationFilter {
+    const conditions: PublicationFilter[] = [];
+
+    if (q) {
+      for (const word of searchWords(q, MAX_SEARCH_WORDS)) {
+        const pattern = wordStartPattern(word);
+        conditions.push({
+          $or: [
+            { title: { $regex: pattern, $options: 'i' } },
+            { about: { $regex: pattern, $options: 'i' } },
+            { skills: { $regex: pattern, $options: 'i' } },
+          ],
+        });
+      }
+    }
+    if (category) {
+      conditions.push({
+        category: { $regex: exactPattern(category), $options: 'i' },
+      });
+    }
+    if (location) {
+      conditions.push({
+        locations: { $regex: wordStartPattern(location), $options: 'i' },
+      });
+    }
+    if (workMode) {
+      conditions.push({
+        $or: [{ workModes: workMode }, { workModes: { $size: 0 } }],
+      });
+    }
+    if (employmentType) {
+      conditions.push({
+        $or: [
+          { employmentTypes: employmentType },
+          { employmentTypes: { $size: 0 } },
+        ],
+      });
+    }
+    if (currency) conditions.push({ currency });
+    if (salaryMin) {
+      conditions.push({
+        $or: [
+          { salaryMax: { $gte: salaryMin } },
+          { salaryMax: { $exists: false }, salaryMin: { $gte: salaryMin } },
+        ],
+      });
+    }
+    if (salaryMax) {
+      conditions.push({
+        $or: [
+          { salaryMin: { $lte: salaryMax } },
+          { salaryMin: { $exists: false }, salaryMax: { $lte: salaryMax } },
+        ],
+      });
+    }
+
+    return allOf(...conditions);
+  }
+
+  private async findBoardPage(
+    filter: PublicationFilter,
+    sort: PublicationBoardSort | undefined,
+    relevanceWords: string[],
+    skip: number,
+    limit: number,
+  ): Promise<PublicationRecord[]> {
+    if (relevanceWords.length > 0) {
+      return this.publicationModel.aggregate<PublicationRecord>([
+        { $match: filter },
+        { $addFields: { relevance: relevanceScore(relevanceWords) } },
+        { $sort: { relevance: -1, createdAt: -1, _id: -1 } },
+        { $skip: skip },
+        { $limit: limit },
+        { $project: { relevance: 0 } },
+      ]);
+    }
+
+    const plan = BOARD_SORTS[sort ?? '-date'];
+
+    if (plan.ranked) {
+      return this.publicationModel.aggregate<PublicationRecord>([
+        { $match: filter },
+        { $addFields: { rankValue: plan.value } },
+        {
+          $addFields: {
+            hasRank: { $cond: [{ $isNumber: '$rankValue' }, 1, 0] },
+          },
+        },
+        { $sort: { hasRank: -1, rankValue: plan.direction, _id: -1 } },
+        { $skip: skip },
+        { $limit: limit },
+        { $project: { rankValue: 0, hasRank: 0 } },
+      ]);
+    }
+
+    return this.publicationModel
+      .find(filter)
+      .sort({ ...plan.order, _id: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean<PublicationRecord[]>();
+  }
+
+  private async canOpenFiles(
+    publication: PublicationFileAccess,
+    viewer: Viewer,
+  ): Promise<boolean> {
+    switch (viewer.accountRole) {
+      case AuthRole.ADMIN:
+        return true;
+      case AuthRole.USER:
+        return publication.user.toString() === viewer.accountId;
+      case AuthRole.COMPANY:
+        return (
+          this.isOnBoard(publication, new Date()) &&
+          (await this.isCompanyApproved(viewer.accountId))
+        );
+    }
+  }
+
+  private async isCompanyApproved(companyId: string): Promise<boolean> {
+    const approved = await this.companyModel.exists({
+      _id: companyId,
+      approved: true,
+    });
+
+    return approved !== null;
+  }
+
+  private async assertCompanyApproved(companyId: string): Promise<void> {
+    if (!(await this.isCompanyApproved(companyId))) {
+      throw new ForbiddenException('Company is not approved');
+    }
   }
 
   private async listPage(
@@ -678,11 +1032,9 @@ export class PublicationsService {
     if (
       salaryMin !== undefined &&
       salaryMax !== undefined &&
-      salaryMin > salaryMax
+      salaryMin >= salaryMax
     ) {
-      throw new BadRequestException(
-        'salaryMin cannot be greater than salaryMax',
-      );
+      throw new BadRequestException('salaryMin must be less than salaryMax');
     }
   }
 
