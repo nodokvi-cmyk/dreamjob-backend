@@ -19,6 +19,11 @@ Visible occurrences found in the frontend `src/` on 2026-11-04 (change each to G
 - Rate limit: 429 `Too Many Requests` (30 per minute per IP, 5 per minute on sensitive routes). Show a calm "try again in a minute".
 - Lists return `{ items, total, page, take }`. Query `page` (default 1), `take` (default 10, max 30).
 - Roles in the token: `user`, `admin`, `company`. `GET /auth/me` tells which one you are.
+- **Salary display (decided 2026-11-15):** one shared component for vacancies and publications, on every card, detail page, list and board. `salaryMin` and `salaryMax` are each `null` when not set and independent of each other:
+  - both `null`: show "Negotiable" (neutral, muted text, never "0" or a dash);
+  - only `salaryMin`: "From 1,500 USD"; only `salaryMax`: "Up to 2,000 USD";
+  - both: "1,000 - 2,000 USD".
+  Use `currency` for the code (or its symbol) and thousands separators. On the filter side, a salary filter leaves out items that show "Negotiable".
 - **Pictures (decided 2026-11-13):** `avatarUrl` (users) and `logoUrl` (companies) are `''` when nothing is uploaded. Two rules:
   - **Vacancy cards and the vacancy details page** (main list, home latest block, bookmarks, the vacancy part of "My applications", admin list): show the company logo small only when `logoUrl` is not `''`. When it is `''`, show no logo and no placeholder, so that card is a bit thinner.
   - **Everywhere else** (header avatar, user profile and public profile, company profile and public company page, applicant list, company dashboard): when `avatarUrl` or `logoUrl` is `''`, show a default picture: a grey square with a centered icon, a person for users and a company icon (briefcase or building) for companies. Build it as a small component with the existing lucide icons and the theme's muted colors (it follows dark mode); never upload default images and never use initials.
@@ -425,7 +430,7 @@ Only role `user` creates and manages publications; admins review them. Approved 
 - `title` (required, max 128), `about` (required, max 3000 characters and 500 words), `category` (required, free text, max 64).
 - `employmentTypes` (`full-time`, `part-time`, `internship`, `temporary`) and `workModes` (`remote`, `onsite`, `hybrid`): arrays, any number, no duplicates; empty means "any".
 - `locations`: up to 10 cities or regions, each max 128. `skills`: up to 20, each max 50.
-- `salaryMin`, `salaryMax`: optional desired range (min not above max), `currency` (`USD` default, `GEL`, `EUR`). On edit `null` removes a salary.
+- `salaryMin`, `salaryMax`: optional desired range (`salaryMin` must be less than `salaryMax`, equal values answer 400; to ask for one fixed amount, send only `salaryMin`), `currency` (`USD` default, `GEL`, `EUR`). On edit `null` removes a salary.
 - `experienceYears`: optional whole number 0 to 60. On edit `null` removes it.
 - There are no contact fields on a publication. Companies never see the user's email or phone from a publication; they invite, and the user's profile email and phone become visible to that company only when the user accepts the invitation (it creates an application, as for any application). Tell the user this in the publication form: "Companies can invite you; your email and phone are shared only if you accept".
 - Edits use the same fields; send only what changes. Empty strings for `title`, `about` and `category` answer 400; arrays sent empty clear the list.
