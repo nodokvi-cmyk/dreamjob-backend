@@ -16,6 +16,9 @@ export enum NotificationType {
   APPLICANT_COMPANY_REVOKED = 'applicantCompanyRevoked',
   PUBLICATION_APPROVED = 'publicationApproved',
   PUBLICATION_REJECTED = 'publicationRejected',
+  INVITATION_RECEIVED = 'invitationReceived',
+  INVITATION_ACCEPTED = 'invitationAccepted',
+  INVITATION_DECLINED = 'invitationDeclined',
 }
 
 export const NOTIFICATION_RECIPIENT_ROLES = [
@@ -65,6 +68,9 @@ export class NotificationTarget {
 
   @Prop({ type: Types.ObjectId, required: false })
   publicationId?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, required: false })
+  invitationId?: Types.ObjectId;
 }
 
 export const notificationTargetSchema =

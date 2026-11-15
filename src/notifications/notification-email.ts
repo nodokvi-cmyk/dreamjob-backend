@@ -9,6 +9,7 @@ type EmailSource = {
   type: NotificationType;
   data: NotificationData;
   vacancyId?: string;
+  invitationId?: string;
 };
 
 function statusChangeSentence(data: NotificationData): string | null {
@@ -28,7 +29,7 @@ function statusChangeSentence(data: NotificationData): string | null {
 }
 
 export function notificationEmail(
-  { type, data, vacancyId }: EmailSource,
+  { type, data, vacancyId, invitationId }: EmailSource,
   frontendUri: string,
 ): PlanNoticeEmailProps | null {
   const dashboardUrl = `${frontendUri}/dashboard`;
@@ -67,6 +68,29 @@ export function notificationEmail(
         buttonUrl: vacancyId
           ? `${frontendUri}/vacancies/${vacancyId}`
           : frontendUri,
+      };
+    }
+    case NotificationType.INVITATION_RECEIVED: {
+      const company = data.companyName || 'A company';
+      const vacancy = data.vacancyTitle
+        ? `"${data.vacancyTitle}"`
+        : 'a vacancy';
+      const publication = data.publicationTitle
+        ? ` after reading your publication "${data.publicationTitle}"`
+        : '';
+      const invitationsUrl = `${frontendUri}/invitations`;
+
+      return {
+        subject: 'You are invited to apply on GetDreamJob',
+        heading: 'You have a new invitation',
+        paragraphs: [
+          `${company} invited you to apply to ${vacancy}${publication}.`,
+          'Open the invitation to accept or decline it.',
+        ],
+        buttonLabel: 'View invitation',
+        buttonUrl: invitationId
+          ? `${invitationsUrl}?focus=${invitationId}`
+          : invitationsUrl,
       };
     }
     default:

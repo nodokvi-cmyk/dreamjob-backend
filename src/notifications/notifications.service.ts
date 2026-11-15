@@ -44,6 +44,7 @@ export type NotificationInput = {
     vacancyId?: string;
     applicationId?: string;
     publicationId?: string;
+    invitationId?: string;
   };
 };
 
@@ -108,6 +109,7 @@ export class NotificationsService {
         type: input.type,
         data: input.data ?? {},
         vacancyId: input.target?.vacancyId,
+        invitationId: input.target?.invitationId,
       },
       this.config.getOrThrow<string>('FRONTEND_URI'),
     );
@@ -321,6 +323,7 @@ export class NotificationsService {
         vacancyId: notification.target?.vacancyId?.toString() ?? null,
         applicationId: notification.target?.applicationId?.toString() ?? null,
         publicationId: notification.target?.publicationId?.toString() ?? null,
+        invitationId: notification.target?.invitationId?.toString() ?? null,
       },
       locked: !expiresAt,
       expiresAt: expiresAt ?? null,
@@ -348,12 +351,18 @@ export class NotificationsService {
   private toTarget(target: NotificationInput['target']) {
     if (
       !target ||
-      (!target.vacancyId && !target.applicationId && !target.publicationId)
+      (!target.vacancyId &&
+        !target.applicationId &&
+        !target.publicationId &&
+        !target.invitationId)
     ) {
       return undefined;
     }
 
     return {
+      ...(target.invitationId
+        ? { invitationId: new Types.ObjectId(target.invitationId) }
+        : {}),
       ...(target.publicationId
         ? { publicationId: new Types.ObjectId(target.publicationId) }
         : {}),
