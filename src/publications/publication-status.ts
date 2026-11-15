@@ -39,6 +39,39 @@ export function notExpiredFilter(now: Date): QueryFilter<Publication> {
   };
 }
 
+type BoardVisibility = Pick<
+  Publication,
+  'status' | 'acceptingInvites' | 'expiresAt'
+>;
+
+type LiveFields = Pick<Publication, 'status' | 'expiresAt'>;
+
+export function boardFilter(now: Date): QueryFilter<Publication> {
+  return {
+    status: PublicationStatus.PUBLISHED,
+    acceptingInvites: true,
+    expiresAt: { $gt: now },
+  };
+}
+
+export function isLivePublication(
+  publication: LiveFields,
+  now: Date = new Date(),
+): boolean {
+  return (
+    publication.status === PublicationStatus.PUBLISHED &&
+    publication.expiresAt !== undefined &&
+    publication.expiresAt.getTime() > now.getTime()
+  );
+}
+
+export function isOnBoard(
+  publication: BoardVisibility,
+  now: Date = new Date(),
+): boolean {
+  return publication.acceptingInvites && isLivePublication(publication, now);
+}
+
 export function expiredFilter(now: Date): QueryFilter<Publication> {
   return {
     status: { $ne: PublicationStatus.CLOSED },
