@@ -211,8 +211,10 @@ Built: apply, reapply and withdraw (users), the user's own list, the company's a
 The same route sends a first application and a reapply. Response (both apply and withdraw):
 
 ```
-{ id, vacancy, status, message, hasCv, hasCoverLetter, submissions, locked, previousOutcome, appliedAt, firstAppliedAt }
+{ id, vacancy, status, message, hasCv, hasCoverLetter, submissions, locked, viaInvitation, previousOutcome, appliedAt, firstAppliedAt }
 ```
+
+`viaInvitation` is `true` when the latest submission was made by accepting a company's invitation (see "Invitations"); a normal apply or reapply sets it to `false`.
 
 `status`: `submitted`, `viewed`, `interview`, `accepted`, `rejected`, `withdrawn`. `submissions` is 1 or 2. `previousOutcome` is `null`, or `withdrawn` / `rejected` after a reapply. `message` is `''` when none. `appliedAt` is the time of the latest submission; `firstAppliedAt` is the time of the first one and never changes, so on a reapply (`submissions` 2) show both, the original time in a quieter style and the reapply time as the main one (design is up to the frontend).
 
@@ -281,11 +283,13 @@ Response `{ items, total, page, take }`. Two item shapes, told apart by `hidden`
 ```
 {
   id, status, appliedAt, firstAppliedAt, hidden: false,
-  isReapply, previousOutcome, message, hasCv, hasCoverLetter,
+  isReapply, viaInvitation, previousOutcome, message, hasCv, hasCoverLetter,
   applicant: { id, firstName, lastName, avatarUrl, email, phone, age }
 }
 { id, status, appliedAt, hidden: true }
 ```
+
+- `viaInvitation: true`: the applicant applied by accepting this company's invitation from one of their publications. Show a small "Invited" badge on the row. Such an application has no message; its CV and cover letter are copies of the publication's files (either may be missing).
 
 - `hidden: true` is a withdrawn application or a deleted user. Show only the status ("Withdrawn" or "Deleted user") and the time, no link, no files, no status controls. `id` is the application's id, for the row key and `focus`.
 - `isReapply` is true on a second submission; then show `previousOutcome` and the reapply time (`appliedAt`) as the main time and `firstAppliedAt` in a quieter style.
@@ -319,9 +323,9 @@ A bell in the header for users and companies. Admins get 403 on every route. The
 | `DELETE /notifications` | none | `{ deleted }` (number removed) |
 
 **Item:** `{ id, type, read, createdAt, data, target, locked, expiresAt, lockedAt, daysLeft, hoursLeft }`.
-- `type`: one of the twelve below. Build the sentence from `type` and `data`.
+- `type`: one of the fifteen below. Build the sentence from `type` and `data`.
 - `data`: a snapshot taken when the notification was made, so it stays readable after the vacancy, publication or company changes or is deleted. Only the fields a type needs are present: `vacancyTitle`, `companyName`, `status`, `reason`, `planName`, `isReapply`, `publicationTitle`. `{}` when none.
-- `target`: `{ vacancyId, applicationId, publicationId }`, each a string or `null`. The target may be deleted by now; a 404 when opening it is normal (show a short "This item no longer exists" message).
+- `target`: `{ vacancyId, applicationId, publicationId, invitationId }`, each a string or `null`. The target may be deleted by now; a 404 when opening it is normal (show a short "This item no longer exists" message).
 
 **Types.** Who gets it, when, which fields are present, and where a click goes. The suggested sentences are examples; keep them short.
 
@@ -339,6 +343,9 @@ A bell in the header for users and companies. Admins get 403 on every route. The
 | `applicantCompanyRevoked` | user | an admin revokes a company the user has an active (not withdrawn) application with; one notice per revoke, however many of its vacancies the user applied to | `companyName` | none | "My applications" when that page exists, otherwise nothing (mark read only) | "Acme is no longer approved; your applications to it are on hold" |
 | `publicationApproved` | user | an admin approves the user's publication (new or edited) | `publicationTitle` | `publicationId` | the user's publication detail | "Your publication Frontend Developer is published" |
 | `publicationRejected` | user | an admin rejects the user's publication | `publicationTitle`, `reason` (only when the admin gave one) | `publicationId` | the user's publication detail | "Your publication Frontend Developer was not approved: <reason>" |
+| `invitationReceived` | user | an approved company invites one of the user's publications to one of its vacancies | `companyName`, `vacancyTitle`, `publicationTitle` | `vacancyId`, `publicationId`, `invitationId` | `/invitations?focus=<invitationId>` | "Acme invited you to apply to Frontend Developer" |
+| `invitationAccepted` | company | the user accepted the company's invitation; this is also the company's notice of the application it created (no separate `newApplication` is sent) | `vacancyTitle`, `publicationTitle`, `isReapply` (true when accepting used the user's reapply) | `vacancyId`, `applicationId`, `invitationId` | the vacancy's applicant list with `focus=<applicationId>` (the row has the "Invited" badge) | "Your invitation was accepted: new application for Frontend Developer" |
+| `invitationDeclined` | company | the user declined the company's invitation | `vacancyTitle`, `publicationTitle` | `vacancyId`, `invitationId` | the company's sent invitations, filtered to that vacancy | "Your invitation for Frontend Developer was declined" |
 
 Approving an already approved company or revoking an already revoked one creates nothing. A company approved, revoked, approved and revoked again gets a notice each time.
 
@@ -349,13 +356,13 @@ Approving an already approved company or revoking an already revoked one creates
 
 | Tone | Color | Types |
 |---|---|---|
-| Positive | green | `vacancyApproved`, `companyApproved`, `publicationApproved`, `applicationStatusChanged` with `status` `interview` or `accepted` |
+| Positive | green | `vacancyApproved`, `companyApproved`, `publicationApproved`, `invitationReceived`, `invitationAccepted`, `applicationStatusChanged` with `status` `interview` or `accepted` |
 | Needs attention | amber | `vacancyRejected`, `companyRevoked`, `planEnded`, `planPaymentActionRequired`, `applicantCompanyRevoked`, `publicationRejected`, `applicationStatusChanged` with `status` `rejected` |
-| Info | neutral (the theme's muted color) | `newApplication`, `applicationWithdrawn` |
+| Info | neutral (the theme's muted color) | `newApplication`, `applicationWithdrawn`, `invitationDeclined` |
 
-Each type also gets its own icon shape, so items differ even within one tone (lucide names): `newApplication` inbox, `applicationWithdrawn` undo, `vacancyApproved`, `companyApproved` and `publicationApproved` check, `vacancyRejected` and `publicationRejected` x, `companyRevoked` and `applicantCompanyRevoked` shield-off, `planEnded` credit-card, `planPaymentActionRequired` triangle-alert, `applicationStatusChanged` calendar for `interview`, check for `accepted`, x for `rejected`.
+Each type also gets its own icon shape, so items differ even within one tone (lucide names): `newApplication` inbox, `applicationWithdrawn` undo, `vacancyApproved`, `companyApproved` and `publicationApproved` check, `vacancyRejected` and `publicationRejected` x, `companyRevoked` and `applicantCompanyRevoked` shield-off, `planEnded` credit-card, `planPaymentActionRequired` triangle-alert, `applicationStatusChanged` calendar for `interview`, check for `accepted`, x for `rejected`, `invitationReceived` mail, `invitationAccepted` handshake, `invitationDeclined` mail-x.
 
-**Emails.** Some events also send an email; the bell notification is created either way. Emailed: `companyApproved`, `companyRevoked`, `applicationStatusChanged`, `planEnded` only after a payment failure (a failed renewal or a 3D Secure confirmation that was not made in time; a cancellation the company chose gets the bell only), and `planPaymentActionRequired` (the email carries the confirmation link; the bell notice only points to billing and the email). Not emailed: `vacancyApproved`, `vacancyRejected`, `newApplication`, `applicationWithdrawn`, `applicantCompanyRevoked`, `publicationApproved`, `publicationRejected`. The email buttons link to these frontend pages, so keep them working: `/dashboard` (company approved or revoked), `/vacancies/:id` (application status), `/company/billing` (plan ended).
+**Emails.** Some events also send an email; the bell notification is created either way. Emailed: `companyApproved`, `companyRevoked`, `applicationStatusChanged`, `invitationReceived`, `planEnded` only after a payment failure (a failed renewal or a 3D Secure confirmation that was not made in time; a cancellation the company chose gets the bell only), and `planPaymentActionRequired` (the email carries the confirmation link; the bell notice only points to billing and the email). Not emailed: `vacancyApproved`, `vacancyRejected`, `newApplication`, `applicationWithdrawn`, `applicantCompanyRevoked`, `publicationApproved`, `publicationRejected`, `invitationAccepted`, `invitationDeclined`. The email buttons link to these frontend pages, so keep them working: `/dashboard` (company approved or revoked), `/vacancies/:id` (application status), `/company/billing` (plan ended), `/invitations?focus=<invitationId>` (invitation received).
 
 **Badge.** Red circle on the bell with `unseenCount`: notifications created since the bell was last opened. The number is capped at 100, so show `99+` when it is above 99, and hide the circle at 0. Call `GET /notifications/badge` on page load and refresh it every 5 minutes, only while the browser tab is visible (every call is a backend function run, so do not poll faster). When the user opens the bell, call `PATCH /notifications/seen` and hide the circle. The badge has nothing to do with read state.
 
@@ -401,7 +408,7 @@ Breaking change: `vacancy` is now the same light card as the public list (see "L
 
 ## Publications (job seekers' "looking for a job" posts)
 
-A user publishes a post saying what job they are looking for; an admin reviews it; later, approved companies will browse published posts and invite the user to one of their vacancies. Free for users. Built so far: the user side, admin review and the company board (browse, open, files). Not built yet: invitations (do not build the Invite button or the invitation inbox).
+A user publishes a post saying what job they are looking for; an admin reviews it; approved companies browse published posts and invite the user to one of their vacancies. Free for users. Built: the user side, admin review, the company board (browse, open, files) and invitations (see "Invitations" below).
 
 Only role `user` creates and manages publications; admins review them. Approved companies browse the board and open publications and their files (read only); every other publication route answers 403 for companies.
 
@@ -449,7 +456,7 @@ Only role `user` creates and manages publications; admins review them. Approved 
 - While an edited publication waits for review (or was rejected after an edit), the timer is paused: `timerPaused: true`. Show "Timer paused during review" instead of the date. The paused time is added back when it is approved again.
 - `POST /publications/:id/extend` works on `published` and `expired` ones (400 otherwise) and sets `expiresAt` to 60 days from now. Offer "Extend" on expired publications and on published ones close to the end.
 
-**Accepting invites:** `acceptingInvites` (default `true`) is the user's own visibility switch, changed with `PATCH /publications/:id/accepting-invites`. When it is off, the publication disappears from the company board, companies can no longer open it or its files (404), and no invites can come in; the owner still sees it in their own list. It needs no review. It changes nothing else: `status`, `expiresAt` and `timerPaused` stay as they are, and the 60-day timer keeps running while the publication is hidden. Show it as a toggle on the publication, next to the status badge. Do not confuse it with `timerPaused`, which only means the lifetime timer is stopped while an edit waits for admin review. The wording and design of the toggle are up to the frontend.
+**Accepting invites:** `acceptingInvites` (default `true`) is the user's own visibility switch, changed with `PATCH /publications/:id/accepting-invites`. When it is off, the publication disappears from the company board, companies can no longer open it or its files (404, except a company with an open or accepted invitation, see "Invitations"), and no new invites can come in; invitations already received stay and can still be accepted; the owner still sees it in their own list. It needs no review. It changes nothing else: `status`, `expiresAt` and `timerPaused` stay as they are, and the 60-day timer keeps running while the publication is hidden. Show it as a toggle on the publication, next to the status badge. Do not confuse it with `timerPaused`, which only means the lifetime timer is stopped while an edit waits for admin review. The wording and design of the toggle are up to the frontend.
 
 **Creating a publication (one form, several requests).** The form shows the text fields, the CV and the cover letter on one screen with one "Create" button, but the backend takes them in separate requests, because of Vercel's request size limit:
 1. `POST /publications` with the JSON fields.
@@ -472,14 +479,70 @@ Show a single "Saving..." state for the whole sequence. If an upload fails, the 
 - `sort`: `-date` (default, newest first), `date`, `salary`, `-salary` (by the top of the desired range, else its bottom), `experience`, `-experience` (by `experienceYears`). Publications without a salary, or without experience years, go last in both directions.
 - Card: `{ id, title, excerpt, category, employmentTypes, workModes, locations, salaryMin, salaryMax, currency, skills, experienceYears, hasCv, hasCoverLetter, expiresAt, createdAt, author, invitation }`. `excerpt` is the first 250 characters of `about`, cut at a word, with `...` when shortened. `salaryMin`, `salaryMax`, `experienceYears` are `null` when not set.
 - `author` is `{ id, firstName, lastName, avatarUrl }` (`avatarUrl` is `''` when none; `author` is `null` in the rare case the account was just deleted). Link the name to `/users/:id/profile`, which applies the user's own privacy switches.
-- `invitation`: the state between the viewing company and this publication. Always `'none'` until invitations are built (phase 3 adds `invited`, `declined`, `accepted`); do not show an Invite button yet. Admins always get `'none'`.
-- Company detail: `GET /publications/:id` for an approved company works only while the publication is on the board (published, not expired, accepting invites); otherwise 404 `Publication not found`, and an unapproved company gets 403 `Company is not approved`. It returns the item without `rejectionReason`, `timerPaused` and `updatedAt`, plus `author` and `invitation`. The CV and cover letter links follow the same rule (404 `File not found` otherwise, also for an unapproved company). Open them inline in a new tab.
+- `invitation`: the state between the viewing company and this publication: `none`, `invited` (sent, not answered), `accepted` or `declined`. Show the "Invite" button only for `none`; for the others show a small status label instead ("Invited", "Accepted", "Declined"). A company can invite a publication only once ever, whatever the vacancy. Admins always get `'none'` and never see an Invite button.
+- Company detail: `GET /publications/:id` for an approved company works while the publication is on the board (published, not expired, accepting invites), and also while it is published and not expired and the company has an `invited` invitation on it, or an `accepted` one whose application is not withdrawn (even with `acceptingInvites` off); a `declined` invitation gives no extra access, and withdrawing the application ends the access of an accepted one; otherwise 404 `Publication not found`, and an unapproved company gets 403 `Company is not approved`. It returns the item without `rejectionReason`, `timerPaused` and `updatedAt`, plus `author`, `invitation`, `invitationId` and `invitedVacancyId` (both `null` when `invitation` is `none`; use `invitationId` for a "Cancel invitation" button while `invited`). The CV and cover letter links follow the same rule (404 `File not found` otherwise, also for an unapproved company). Open them inline in a new tab.
 - No email or phone anywhere on the board or the detail (see Fields). Use skeleton loaders on the board cards.
 
 **Errors:** 404 `Publication not found`, 403 `No permission` (another user's publication), 409 `Publication changed, try again` (edited in another tab at the same moment: reload), 404 `User not found` (the account was deleted).
 
 Use skeleton loaders on the lists.
 
+## Invitations (approved companies invite publications; users accept or decline)
+
+An approved company invites a user's publication to one of its own vacancies. The user sees the invitation in their inbox and accepts it (which applies to that vacancy for them) or declines it.
+
+| Route | Who | Body / query | Returns |
+|---|---|---|---|
+| `POST /publications/:id/invitations` | approved company | `{ vacancyId, message? }` | the invitation |
+| `DELETE /invitations/:id` | approved company (sender) | none | the deleted invitation |
+| `GET /invitations/sent` | company | `page`, `take`, `status`, `vacancyId` | `{ items, total, page, take }` |
+| `GET /invitations/quota` | company | none | `{ used, limit, resetsAt }` |
+| `GET /invitations/mine` | user | `page`, `take`, `status`, `vacancyId`, `focus` | `{ items, total, page, take }` |
+| `PATCH /invitations/:id/accept` | user (recipient) | none | `{ invitation, application }` |
+| `PATCH /invitations/:id/decline` | user (recipient) | none | the invitation |
+
+**Invitation (write responses):** `{ id, status, message, publication, vacancy, company, applicationId, createdAt, respondedAt }`. `status` is `invited`, `accepted` or `declined`. `message` is `''` when none. `publication`, `vacancy`, `company` are ids. `applicationId` is set after an accept. `respondedAt` is when the user accepted or declined (`null` before).
+
+**Invite (company).** The Invite button on a board card or the company detail opens a small form: pick one of the company's own vacancies that is published and not expired (from `GET /vacancies/mine?status=published`), and an optional message (max 500 characters and 100 words; show a word counter like the apply form). Show the remaining quota in the form ("3 of 5 invitations left this month"). Errors:
+- 403 `Company is not approved`; 403 `No permission` (not the company's vacancy).
+- 404 `Publication not found` (no longer on the board), 404 `Vacancy not found`.
+- 400 `Only a published vacancy that has not expired can be used for an invitation`.
+- 409 `You already invited this publication` (one invitation per company and publication, ever; a cancelled one frees it).
+- 400 `Monthly invitation limit reached (N). It resets at the start of next month (UTC).`
+
+**Monthly quota.** Each company has a number of invitations per calendar month (UTC): 5 on Pay as you publish (or no plan yet), 25 on Plus, 50 on Elite. `GET /invitations/quota` returns `used` (this month), `limit` and `resetsAt` (the first moment of next month, UTC). Show it on the board and the sent list, and disable Invite when `used >= limit`. A failed invite uses nothing; cancelling an invitation does not give it back.
+
+**Sent invitations (company).** `GET /invitations/sent`, newest first. Item: the invitation above plus `vacancy: { id, title } | null`, `publication: { id, title } | null` (the title as it was when invited) and `publicationAvailable` (true when the company can still open the publication: it is on the board, or the publication is published and not expired and the invitation is `invited`, or `accepted` with an application that is not withdrawn; link the title only then). Offer "Cancel" on `invited` items: `DELETE /invitations/:id` (400 `Only an invitation that was not answered yet can be cancelled`, 409 `Invitation changed, try again` when the user answered at the same moment: reload). Accepted items link to the vacancy's applicant list with `focus=<applicationId>`.
+
+**Inbox (user).** A new page `/invitations` that loads `GET /invitations/mine`, newest first. The email and the bell open `/invitations?focus=<invitationId>`: send `focus`, show the `page` the response returns, scroll to that item and highlight it (like the applicant list). Item:
+
+```
+{
+  id, status, message, createdAt, respondedAt,
+  publication: { id, title } | null,
+  vacancy: { id, title, deadline, status } | null,
+  company: { id, companyName, logoUrl, approved },
+  application: { id, status, canReapply, submissions } | null
+}
+```
+
+- `vacancy.status` is `published`, `expired`, `closed` or `unavailable` (same meaning as in "My applications"); link the title only for `published`, `expired`, `closed`. `company.approved: false`: show the "no approved status" warning and the name as plain text.
+- `application` is the user's own application on that vacancy, if any (it may come from a normal apply or from this invitation).
+- Show Accept and Decline only on `invited` items. Disable Accept (with the reason in a tooltip) when `vacancy.status` is not `published`, when `company.approved` is false, or when `application` is ended (`rejected` or `withdrawn`) and `canReapply` is false.
+
+**Accept.** One confirm window before the call: "Accepting applies to <vacancy> with the CV and cover letter of your publication. Your email and phone number become visible to this company." (the same note as the apply form). When `application` is `rejected` or `withdrawn` and `canReapply` is true, add: "You applied here before and were rejected / withdrew. Accepting uses your only reapply." What accept does:
+- No application yet: creates one with copies of the publication's CV and cover letter (whichever exist), no message, `viaInvitation: true`.
+- An active application already exists: nothing new is sent; the invitation is just marked accepted.
+- An ended application with a reapply left: reapplies with the publication's files; old files are always replaced or removed (there is no "keep previous" option here).
+- Response `{ invitation, application }` (application shape as in "Applications"). `invitation` is `null` in the rare case the company cancelled it at the same moment; the application still stands.
+- Errors: 409 `Your publication is under review. You can accept this invitation once it is published again`, 409 `Your publication is closed`, 409 `Your publication has expired. Extend it to accept this invitation`, 400 `This vacancy is closed`, 400 `This vacancy has expired`, 400 `This company is not accepting applications right now`, 409 `You cannot apply to this vacancy again`, 400 `This invitation was already answered`, 403 `No permission`, 404 `Invitation not found`. On any of these the invitation stays `invited`. Rate limit: 5 a minute.
+
+**Decline.** No confirm needed beyond a simple "Decline this invitation?". Final. It only stops this company inviting this publication again; the user can still apply to the vacancy normally. Errors: 400 `This invitation was already answered`, 409 `Invitation changed, try again`.
+
+**Deletion.** Deleting a publication or the user account deletes its invitations; deleting a vacancy or a company deletes the invitations that point to it. Applications created by an accepted invitation stay like any other application.
+
+Use skeleton loaders on both lists.
+
 ## Not built yet (do not build screens for these)
 
-Publication invitations (phase 3: Invite button, invitation inbox, accept and decline), chatbot, a list of a company's vacancies on its public page (open and past; the page itself and `GET /companies/:id/profile` exist), a billing history list inside the site (use the portal), Stripe payments for anything except plans, vacancy submits and vacancy extensions.
+Chatbot, a list of a company's vacancies on its public page (open and past; the page itself and `GET /companies/:id/profile` exist), a billing history list inside the site (use the portal), Stripe payments for anything except plans, vacancy submits and vacancy extensions.
