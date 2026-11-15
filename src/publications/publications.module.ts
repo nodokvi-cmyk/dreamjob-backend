@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AwsS3Module } from '../aws-s3/aws-s3.module.js';
 import { Company, companySchema } from '../companies/schema/company.schema.js';
+import { InvitationsModule } from '../invitations/invitations.module.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
 import { User, userSchema } from '../users/schema/user.schema.js';
 import { PublicationsController } from './publications.controller.js';
@@ -16,6 +17,7 @@ import { Publication, publicationSchema } from './schema/publication.schema.js';
       { name: Company.name, schema: companySchema },
     ]),
     AwsS3Module,
+    InvitationsModule,
     NotificationsModule,
   ],
   controllers: [PublicationsController],
