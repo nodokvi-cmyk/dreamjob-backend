@@ -19,6 +19,7 @@ import {
 } from '../aws-s3/process-image.js';
 import { StoragePrefix } from '../aws-s3/storage-prefix.js';
 import { BookmarksService } from '../bookmarks/bookmarks.service.js';
+import { InvitationsService } from '../invitations/invitations.service.js';
 import {
   companyFieldsOf,
   companySummaries,
@@ -142,6 +143,7 @@ export class VacanciesService {
     private readonly billing: VacancyBillingService,
     private readonly applications: ApplicationsService,
     private readonly bookmarks: BookmarksService,
+    private readonly invitations: InvitationsService,
     private readonly notifications: NotificationsService,
   ) {}
 
@@ -700,6 +702,7 @@ export class VacanciesService {
     }
     await this.applications.removeForVacancies([vacancy._id]);
     await this.bookmarks.removeForVacancies([vacancy._id]);
+    await this.invitations.removeForVacancies([vacancy._id]);
     await this.deleteFiles(vacancy.photoKeys);
 
     return this.toResponse(vacancy, true);
@@ -720,6 +723,7 @@ export class VacanciesService {
     const vacancyIds = vacancies.map(({ _id }) => _id);
     await this.applications.removeForVacancies(vacancyIds);
     await this.bookmarks.removeForVacancies(vacancyIds);
+    await this.invitations.removeForVacancies(vacancyIds);
     await this.deleteFiles(vacancies.flatMap(({ photoKeys }) => photoKeys));
   }
 
@@ -987,9 +991,7 @@ export class VacanciesService {
       salaryMax !== undefined &&
       salaryMin >= salaryMax
     ) {
-      throw new BadRequestException(
-        'salaryMin must be less than salaryMax',
-      );
+      throw new BadRequestException('salaryMin must be less than salaryMax');
     }
   }
 
