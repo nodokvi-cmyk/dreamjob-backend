@@ -124,6 +124,12 @@ export class Company {
   })
   stripeSubscriptionId?: string;
 
+  @Prop({ type: String, required: false, select: false })
+  invitesMonth?: string;
+
+  @Prop({ type: Number, default: 0, min: 0, select: false })
+  invitesUsed!: number;
+
   declare readonly isProfileComplete: boolean;
 }
 
