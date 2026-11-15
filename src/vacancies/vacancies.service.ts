@@ -985,10 +985,10 @@ export class VacanciesService {
     if (
       salaryMin !== undefined &&
       salaryMax !== undefined &&
-      salaryMin > salaryMax
+      salaryMin >= salaryMax
     ) {
       throw new BadRequestException(
-        'salaryMin cannot be greater than salaryMax',
+        'salaryMin must be less than salaryMax',
       );
     }
   }
