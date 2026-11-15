@@ -13,6 +13,7 @@ interface PlanSetting {
   priceId: string | null;
   includedCredits: number;
   vacancyPriceCents: number;
+  monthlyInvites: number;
 }
 
 export const PLAN_SETTINGS = {
@@ -21,18 +22,21 @@ export const PLAN_SETTINGS = {
     priceId: null,
     includedCredits: 0,
     vacancyPriceCents: 500,
+    monthlyInvites: 5,
   },
   [BillingPlan.PLUS]: {
     label: 'Plus',
     priceId: 'price_1UYFJ6LQGK6RLTYUyhYq35XL',
     includedCredits: 15,
     vacancyPriceCents: 300,
+    monthlyInvites: 25,
   },
   [BillingPlan.ELITE]: {
     label: 'Elite',
     priceId: 'price_1UYFLRLQGK6RLTYUqf8JExOw',
     includedCredits: 40,
     vacancyPriceCents: 200,
+    monthlyInvites: 50,
   },
 } as const satisfies Record<BillingPlan, PlanSetting>;
 
