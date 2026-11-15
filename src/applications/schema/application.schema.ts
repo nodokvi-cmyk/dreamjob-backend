@@ -83,6 +83,9 @@ export class Application {
   @Prop({ type: Boolean, default: false })
   locked!: boolean;
 
+  @Prop({ type: Boolean, default: false })
+  viaInvitation!: boolean;
+
   @Prop({ type: String, enum: PreviousOutcome, required: false })
   previousOutcome?: PreviousOutcome;
 
