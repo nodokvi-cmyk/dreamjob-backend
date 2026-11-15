@@ -11,6 +11,7 @@ import { BookmarksModule } from './bookmarks/bookmarks.module.js';
 import { EmailChangeModule } from './email-change/email-change.module.js';
 import { CompaniesModule } from './companies/companies.module.js';
 import { validateEnv } from './config/env.validation.js';
+import { InvitationsModule } from './invitations/invitations.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { PaymentModule } from './payment/payment.module.js';
 import { PublicationsModule } from './publications/publications.module.js';
@@ -45,6 +46,7 @@ import { VacanciesModule } from './vacancies/vacancies.module.js';
     PaymentModule,
     NotificationsModule,
     PublicationsModule,
+    InvitationsModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: RateLimitGuard }],
