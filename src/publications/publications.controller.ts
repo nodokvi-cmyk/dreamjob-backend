@@ -25,7 +25,11 @@ import { IsValidMongoIdDto } from '../shared/dto/is-valid-mongo-id.dto.js';
 import { AuthRole } from '../shared/types/auth-role.js';
 import { AcceptingInvitesDto } from './dto/accepting-invites.dto.js';
 import { CreatePublicationDto } from './dto/create-publication.dto.js';
-import { PublicationStatusFilterDto } from './dto/publication-filter.dto.js';
+import {
+  AdminPublicationsFilterDto,
+  PublicationBoardFilterDto,
+  PublicationStatusFilterDto,
+} from './dto/publication-filter.dto.js';
 import { RejectPublicationDto } from './dto/reject-publication.dto.js';
 import { UpdatePublicationDto } from './dto/update-publication.dto.js';
 import { PublicationsService } from './publications.service.js';
@@ -49,6 +53,20 @@ export class PublicationsController {
     return this.publicationsService.create(accountId, createPublicationDto);
   }
 
+  @Get()
+  @UseGuards(IsAuthGuard, RolesGuard)
+  @Roles(AuthRole.COMPANY, AuthRole.ADMIN)
+  findBoard(
+    @Query() query: PublicationBoardFilterDto,
+    @AccountId() accountId: string,
+    @AccountRole() accountRole: AuthRole,
+  ) {
+    return this.publicationsService.listBoard(query, {
+      accountId,
+      accountRole,
+    });
+  }
+
   @Get('mine')
   @UseGuards(IsAuthGuard, RolesGuard)
   @Roles(AuthRole.USER)
@@ -62,13 +80,13 @@ export class PublicationsController {
   @Get('admin')
   @UseGuards(IsAuthGuard, RolesGuard)
   @Roles(AuthRole.ADMIN)
-  findAllForAdmin(@Query() query: PublicationStatusFilterDto) {
+  findAllForAdmin(@Query() query: AdminPublicationsFilterDto) {
     return this.publicationsService.listForAdmin(query);
   }
 
   @Get(':id')
   @UseGuards(IsAuthGuard, RolesGuard)
-  @Roles(AuthRole.USER, AuthRole.ADMIN)
+  @Roles(AuthRole.USER, AuthRole.COMPANY, AuthRole.ADMIN)
   findOne(
     @Param() { id }: IsValidMongoIdDto,
     @AccountId() accountId: string,
@@ -79,7 +97,7 @@ export class PublicationsController {
 
   @Get(':id/cv')
   @UseGuards(IsAuthGuard, RolesGuard)
-  @Roles(AuthRole.USER, AuthRole.ADMIN)
+  @Roles(AuthRole.USER, AuthRole.COMPANY, AuthRole.ADMIN)
   getCv(
     @Param() { id }: IsValidMongoIdDto,
     @AccountId() accountId: string,
@@ -94,7 +112,7 @@ export class PublicationsController {
 
   @Get(':id/cover-letter')
   @UseGuards(IsAuthGuard, RolesGuard)
-  @Roles(AuthRole.USER, AuthRole.ADMIN)
+  @Roles(AuthRole.USER, AuthRole.COMPANY, AuthRole.ADMIN)
   getCoverLetter(
     @Param() { id }: IsValidMongoIdDto,
     @AccountId() accountId: string,
