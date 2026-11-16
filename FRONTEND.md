@@ -2,7 +2,7 @@
 
 API contract for the GetDreamJob frontend. The backend is built in steps: build only what is listed here. When the backend adds routes, this file is updated first. Types in the frontend are hand-written from this file, not generated.
 
-**Backend status (2026-11-13):** everything in this file is built and pushed, including applications, bookmarks, notifications, billing and the light vacancy cards. Only the "Not built yet" list at the end is missing. The frontend `CLAUDE.md` line "Not in the backend yet: applications, saved jobs, payments, chatbot" is outdated: only the chatbot is missing. Build every screen this file describes that the frontend does not have yet, and update existing screens to the current response shapes (several sections below are marked as breaking changes).
+**Backend status (2026-11-13):** everything in this file is built and pushed, including applications, bookmarks, notifications, billing and the light vacancy cards. Only the "Not built yet" list at the end is missing. The frontend `CLAUDE.md` line "Not in the backend yet: applications, saved jobs, payments, chatbot" is outdated: everything is built, including the chatbot (section "Chatbot"). Build every screen this file describes that the frontend does not have yet, and update existing screens to the current response shapes (several sections below are marked as breaking changes).
 
 ## Brand
 
@@ -553,6 +553,26 @@ An approved company invites a user's publication to one of its own vacancies. Th
 
 Use skeleton loaders on both lists.
 
+## Chatbot (anyone, signed in or not)
+
+A helper window: it searches vacancies or publications, answers questions about the site and gives CV and publication tips. One route.
+
+`POST /chat`, with the `Authorization` header when the user is signed in. Without it, or with a bad or expired token, the visitor counts as anonymous. Body:
+
+```json
+{ "messages": [ { "role": "user", "content": "remote React jobs in Tbilisi" } ] }
+```
+
+- `messages`: 1 to 12 items, oldest first. `role` is `user` or `assistant`. `content` is 1 to 3000 characters (trimmed), at most 8000 in total. The last item must have role `user` (400 otherwise).
+- **The backend stores nothing.** Keep the conversation in component state or `sessionStorage` and send the last 10 messages each time, assistant replies included as plain text. Clear it on sign-in and sign-out so a chat never carries over to another account.
+- Answer 200: `{ reply, cards }`. `reply` is plain text (render it as text, never as HTML). `cards` holds the results of the assistant's latest search, up to 10, possibly none; show them under the reply, compact (title, a few facts, a link). When the assistant runs out of time after a search, `reply` is "Here is what I found." and the cards are still there. When the AI service is busy (its free quota is small and shared), the backend still searches with keywords from the message and answers 200 with `reply` "The assistant is busy right now. Here are results that match your message." and cards; show it like any reply.
+- Card `type: 'vacancy'`: `id`, `title`, `excerpt`, `category`, `employmentType`, `workMode`, `location`, `salaryMin`, `salaryMax`, `currency`, `deadline`, `company`, `companyName`, `logoUrl`. Link to `/vacancies/:id`, use the vacancy card look, the shared salary component and the logo rule.
+- Card `type: 'publication'`: `id`, `title`, `excerpt`, `category`, `employmentTypes`, `workModes`, `locations`, `salaryMin`, `salaryMax`, `currency`, `skills`, `experienceYears`, `author` (`{ id, firstName, lastName, avatarUrl }` or `null`), `invitation` (`none`, `invited`, `declined`, `accepted`). Same shape as the company board cards; open the publication detail page.
+- **Who gets what** (the server decides from the token; send nothing about roles): anonymous visitors and users get vacancy cards, approved companies get publication cards, admins get both. Users and admins also get CV and publication writing tips; every role gets site help. Show the chat button to everyone. Greet a company with "I can find job seekers' publications"; greet a user or visitor with "I can find vacancies and help with your CV".
+- Errors: 400 bad body. 429 after more than 5 messages in a minute: show "You are sending messages too fast, wait a moment" and keep the typed text. 503 when the AI service is busy or down: `message` is a plain sentence to show as is; keep the typed text so the user can resend.
+- A reply takes a few seconds: show a typing indicator, disable send while a request runs, and give up after about 30 seconds (the backend always answers within about 25).
+- It cannot see the user's account, applications or files. CV tips work on text the user pastes into the chat.
+
 ## Not built yet (do not build screens for these)
 
-Chatbot, a list of a company's vacancies on its public page (open and past; the page itself and `GET /companies/:id/profile` exist), a billing history list inside the site (use the portal), Stripe payments for anything except plans, vacancy submits and vacancy extensions.
+A list of a company's vacancies on its public page (open and past; the page itself and `GET /companies/:id/profile` exist), a billing history list inside the site (use the portal), Stripe payments for anything except plans, vacancy submits and vacancy extensions.
