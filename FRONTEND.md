@@ -2,7 +2,7 @@
 
 API contract for the GetDreamJob frontend. The backend is built in steps: build only what is listed here. When the backend adds routes, this file is updated first. Types in the frontend are hand-written from this file, not generated.
 
-**Backend status (2026-11-13):** everything in this file is built and pushed, including applications, bookmarks, notifications, billing and the light vacancy cards. Only the "Not built yet" list at the end is missing. The frontend `CLAUDE.md` line "Not in the backend yet: applications, saved jobs, payments, chatbot" is outdated: everything is built, including the chatbot (section "Chatbot"). Build every screen this file describes that the frontend does not have yet, and update existing screens to the current response shapes (several sections below are marked as breaking changes).
+**Backend status (2026-11-17):** every feature is built and pushed: accounts, vacancies with the light cards, billing, applications, notifications, bookmarks, publications, invitations and the chatbot. This file was checked against the code on 2026-11-17 (routes, roles, bodies, limits, response fields, error messages). Only the "Not built yet" list at the end is missing. The frontend `CLAUDE.md` line "Not in the backend yet: applications, saved jobs, payments, chatbot" is outdated: everything is built, including the chatbot (section "Chatbot"). Build every screen this file describes that the frontend does not have yet, and update existing screens to the current response shapes (several sections below are marked as breaking changes).
 
 ## Brand
 
