@@ -544,7 +544,7 @@ An approved company invites a user's publication to one of its own vacancies. Th
 - No application yet: creates one with copies of the publication's CV and cover letter (whichever exist), no message, `viaInvitation: true`.
 - An active application already exists: nothing new is sent; the invitation is just marked accepted.
 - An ended application with a reapply left: reapplies with the publication's files; old files are always replaced or removed (there is no "keep previous" option here).
-- Response `{ invitation, application }` (application shape as in "Applications"). `invitation` is `null` in the rare case the company cancelled it at the same moment; the application still stands.
+- Response `{ invitation, application }` (application shape as in "Applications"). `invitation` is `null` in the rare case the company cancelled it, or the user declined it, at the same moment; the application still stands.
 - Errors: 409 `Your publication is under review. You can accept this invitation once it is published again`, 409 `Your publication is closed`, 409 `Your publication has expired. Extend it to accept this invitation`, 400 `This vacancy is closed`, 400 `This vacancy has expired`, 400 `This company is not accepting applications right now`, 409 `You cannot apply to this vacancy again`, 400 `This invitation was already answered`, 403 `No permission`, 404 `Invitation not found`. On any of these the invitation stays `invited`. Rate limit: 5 a minute.
 
 **Decline.** No confirm needed beyond a simple "Decline this invitation?". Final. It only stops this company inviting this publication again; the user can still apply to the vacancy normally. Errors: 400 `This invitation was already answered`, 409 `Invitation changed, try again`.
