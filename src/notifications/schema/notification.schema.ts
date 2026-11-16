@@ -53,6 +53,9 @@ export class NotificationData {
 
   @Prop({ type: String, required: false })
   publicationTitle?: string;
+
+  @Prop({ type: Boolean, required: false })
+  alreadyApplied?: boolean;
 }
 
 export const notificationDataSchema =
