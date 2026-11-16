@@ -640,23 +640,29 @@ export class InvitationsService {
       ? { plan: company.plan }
       : { plan: { $exists: false } };
 
-    const counted = await this.companyModel.updateOne(
-      {
-        _id: companyId,
-        ...planFilter,
-        invitesMonth: month,
-        invitesUsed: { $lt: this.inviteLimit(company.plan) },
-      },
-      { $inc: { invitesUsed: 1 } },
-    );
-    if (counted.modifiedCount > 0) return true;
+    const countInMonth = async (): Promise<boolean> => {
+      const counted = await this.companyModel.updateOne(
+        {
+          _id: companyId,
+          ...planFilter,
+          invitesMonth: month,
+          invitesUsed: { $lt: this.inviteLimit(company.plan) },
+        },
+        { $inc: { invitesUsed: 1 } },
+      );
+
+      return counted.modifiedCount > 0;
+    };
+
+    if (await countInMonth()) return true;
 
     const reset = await this.companyModel.updateOne(
       { _id: companyId, ...planFilter, invitesMonth: { $ne: month } },
       { $set: { invitesMonth: month, invitesUsed: 1 } },
     );
+    if (reset.modifiedCount > 0) return true;
 
-    return reset.modifiedCount > 0;
+    return countInMonth();
   }
 
   private inviteLimit(plan: BillingPlan | undefined): number {
