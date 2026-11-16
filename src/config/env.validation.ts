@@ -15,6 +15,7 @@ const REQUIRED_KEYS = [
   'CLOUDFRONT_DOMAIN_NAME',
   'STRIPE_API_KEY',
   'STRIPE_WEBHOOK_SECRET',
+  'LLM_API_KEY',
 ] as const;
 
 function isFilled(value: unknown): value is string {
