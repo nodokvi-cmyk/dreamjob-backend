@@ -36,7 +36,15 @@ import {
 } from './dto/publication-filter.dto.js';
 import { UpdatePublicationDto } from './dto/update-publication.dto.js';
 import {
+  type CompanyInvitation,
+  InvitationsService,
+} from '../invitations/invitations.service.js';
+import { NO_INVITATION } from '../invitations/schema/invitation.schema.js';
+import {
+  boardFilter,
   expiredFilter,
+  isLivePublication,
+  isOnBoard,
   isPublicationExpired,
   notExpiredFilter,
   publicationViewStatus,
@@ -92,6 +100,7 @@ type PublicationKeys = Pick<PublicationRecord, 'cvKey' | 'coverLetterKey'>;
 
 type PublicationFileAccess = Pick<
   PublicationRecord,
+  | '_id'
   | 'user'
   | 'cvKey'
   | 'coverLetterKey'
@@ -100,9 +109,9 @@ type PublicationFileAccess = Pick<
   | 'expiresAt'
 >;
 
-type BoardVisibility = Pick<
-  Publication,
-  'status' | 'acceptingInvites' | 'expiresAt'
+type CompanyAccess = Pick<
+  PublicationRecord,
+  '_id' | 'status' | 'acceptingInvites' | 'expiresAt'
 >;
 
 type PublicationAuthor = {
@@ -120,7 +129,6 @@ type BoardSortPlan =
       direction: 1 | -1;
     };
 
-const NO_INVITATION = 'none';
 const MAX_SEARCH_WORDS = 5;
 const TOP_PAY = { $ifNull: ['$salaryMax', '$salaryMin'] };
 
@@ -196,6 +204,7 @@ export class PublicationsService {
     @InjectModel(Company.name) private readonly companyModel: Model<Company>,
     private readonly s3: AwsS3Service,
     private readonly notifications: NotificationsService,
+    private readonly invitations: InvitationsService,
   ) {}
 
   toResponse(publication: PublicationRecord, includePrivate: boolean) {
@@ -307,10 +316,7 @@ export class PublicationsService {
     }
 
     const { page, take } = query;
-    const filter = allOf(
-      this.boardFilter(new Date()),
-      this.buildBoardFilter(query),
-    );
+    const filter = allOf(boardFilter(new Date()), this.buildBoardFilter(query));
 
     const relevanceWords =
       query.q && !query.sort ? searchWords(query.q, MAX_SEARCH_WORDS) : [];
@@ -325,10 +331,24 @@ export class PublicationsService {
       ),
       this.publicationModel.countDocuments(filter),
     ]);
-    const authors = await this.authorsOf(items);
+    const [authors, invitations] = await Promise.all([
+      this.authorsOf(items),
+      viewer.accountRole === AuthRole.COMPANY
+        ? this.invitations.statesFor(
+            viewer.accountId,
+            items.map(({ _id }) => _id),
+          )
+        : new Map<string, CompanyInvitation>(),
+    ]);
 
     return {
-      items: items.map((publication) => this.toCard(publication, authors)),
+      items: items.map((publication) =>
+        this.toCard(
+          publication,
+          authors,
+          invitations.get(publication._id.toString()),
+        ),
+      ),
       total,
       page,
       take,
@@ -502,6 +522,7 @@ export class PublicationsService {
     const publication = await this.findOwned(id, userId);
 
     await this.publicationModel.deleteOne({ _id: id });
+    await this.invitations.removeForPublications([publication._id]);
     await this.deleteFiles([publication]);
 
     return this.toResponse(publication, true);
@@ -665,11 +686,14 @@ export class PublicationsService {
     const filter = { user: new Types.ObjectId(userId) };
     const publications = await this.publicationModel
       .find(filter)
-      .select('cvKey coverLetterKey')
-      .lean<PublicationKeys[]>();
+      .select('_id cvKey coverLetterKey')
+      .lean<(PublicationKeys & Pick<PublicationRecord, '_id'>)[]>();
     if (publications.length === 0) return;
 
     await this.publicationModel.deleteMany(filter);
+    await this.invitations.removeForPublications(
+      publications.map(({ _id }) => _id),
+    );
     await this.deleteFiles(publications);
   }
 
@@ -677,22 +701,53 @@ export class PublicationsService {
     await this.assertCompanyApproved(companyId);
 
     const publication = await this.publicationModel
-      .findOne({ _id: id, ...this.boardFilter(new Date()) })
+      .findById(id)
       .lean<PublicationRecord>();
-    if (!publication) throw new NotFoundException('Publication not found');
+    const invitation = publication
+      ? await this.invitationOf(companyId, publication._id)
+      : undefined;
+    if (
+      !publication ||
+      !this.isVisibleToCompany(publication, invitation, new Date())
+    ) {
+      throw new NotFoundException('Publication not found');
+    }
 
     const authors = await this.authorsOf([publication]);
 
     return {
       ...this.toResponse(publication, false),
       author: authors.get(publication.user.toString()) ?? null,
-      invitation: NO_INVITATION,
+      invitation: invitation?.status ?? NO_INVITATION,
+      invitationId: invitation?.id ?? null,
+      invitedVacancyId: invitation?.vacancyId ?? null,
     };
+  }
+
+  private async invitationOf(
+    companyId: string,
+    publicationId: Types.ObjectId,
+  ): Promise<CompanyInvitation | undefined> {
+    const states = await this.invitations.statesFor(companyId, [publicationId]);
+
+    return states.get(publicationId.toString());
+  }
+
+  private isVisibleToCompany(
+    publication: CompanyAccess,
+    invitation: CompanyInvitation | undefined,
+    now: Date,
+  ): boolean {
+    return (
+      isOnBoard(publication, now) ||
+      (invitation?.grantsAccess === true && isLivePublication(publication, now))
+    );
   }
 
   private toCard(
     publication: PublicationRecord,
     authors: Map<string, PublicationAuthor>,
+    invitation: CompanyInvitation | undefined,
   ) {
     return {
       id: publication._id.toString(),
@@ -712,7 +767,7 @@ export class PublicationsService {
       expiresAt: publication.expiresAt ?? null,
       createdAt: publication.createdAt,
       author: authors.get(publication.user.toString()) ?? null,
-      invitation: NO_INVITATION,
+      invitation: invitation?.status ?? NO_INVITATION,
     };
   }
 
@@ -740,23 +795,6 @@ export class PublicationsService {
           avatarUrl: this.s3.publicUrl(user.avatarKey),
         },
       ]),
-    );
-  }
-
-  private boardFilter(now: Date): PublicationFilter {
-    return {
-      status: PublicationStatus.PUBLISHED,
-      acceptingInvites: true,
-      expiresAt: { $gt: now },
-    };
-  }
-
-  private isOnBoard(publication: BoardVisibility, now: Date): boolean {
-    return (
-      publication.status === PublicationStatus.PUBLISHED &&
-      publication.acceptingInvites &&
-      publication.expiresAt !== undefined &&
-      publication.expiresAt.getTime() > now.getTime()
     );
   }
 
@@ -881,11 +919,15 @@ export class PublicationsService {
         return true;
       case AuthRole.USER:
         return publication.user.toString() === viewer.accountId;
-      case AuthRole.COMPANY:
-        return (
-          this.isOnBoard(publication, new Date()) &&
-          (await this.isCompanyApproved(viewer.accountId))
+      case AuthRole.COMPANY: {
+        if (!(await this.isCompanyApproved(viewer.accountId))) return false;
+        const invitation = await this.invitationOf(
+          viewer.accountId,
+          publication._id,
         );
+
+        return this.isVisibleToCompany(publication, invitation, new Date());
+      }
     }
   }
 
