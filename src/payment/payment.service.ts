@@ -298,9 +298,14 @@ export class PaymentService {
   private async markPlanEnding(subscription: Stripe.Subscription) {
     if (subscription.metadata.app !== STRIPE_APP_TAG) return;
 
+    const ending =
+      subscription.cancel_at_period_end ||
+      (subscription.cancel_at !== null &&
+        subscription.metadata[PLAN_END_REASON_KEY] !== PLAN_END_AUTHENTICATION);
+
     await this.companyModel.updateOne(
       { stripeSubscriptionId: subscription.id },
-      { $set: { planEndsAtPeriodEnd: subscription.cancel_at_period_end } },
+      { $set: { planEndsAtPeriodEnd: ending } },
     );
   }
 
