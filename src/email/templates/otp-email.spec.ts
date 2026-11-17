@@ -2,10 +2,13 @@ import { renderOtpEmail } from './otp-email.js';
 
 describe('renderOtpEmail', () => {
   it('renders the code and expiry into html and plain text', async () => {
-    const { subject, html, text } = await renderOtpEmail({
-      code: '482913',
-      expiresInMinutes: 10,
-    });
+    const { subject, html, text } = await renderOtpEmail(
+      { code: '482913', expiresInMinutes: 10 },
+      {
+        siteUrl: 'https://example.com',
+        logoUrl: 'https://cdn.example.com/brand/logo.png',
+      },
+    );
 
     expect(subject).toBe('Your GetDreamJob verification code');
     expect(html).toContain('482913');

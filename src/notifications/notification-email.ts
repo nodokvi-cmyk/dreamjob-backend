@@ -28,6 +28,19 @@ function statusChangeSentence(data: NotificationData): string | null {
   }
 }
 
+function statusChangeSubject(data: NotificationData): string {
+  const vacancy = data.vacancyTitle ? `"${data.vacancyTitle}"` : 'a vacancy';
+
+  switch (data.status) {
+    case ApplicationStatus.INTERVIEW:
+      return `Interview stage for ${vacancy} on GetDreamJob`;
+    case ApplicationStatus.ACCEPTED:
+      return `Your application for ${vacancy} was accepted`;
+    default:
+      return `Update on your application for ${vacancy}`;
+  }
+}
+
 export function notificationEmail(
   { type, data, vacancyId, invitationId }: EmailSource,
   frontendUri: string,
@@ -61,7 +74,7 @@ export function notificationEmail(
       if (!sentence) return null;
 
       return {
-        subject: 'Update on your GetDreamJob application',
+        subject: statusChangeSubject(data),
         heading: 'Your application was updated',
         paragraphs: [sentence],
         buttonLabel: 'View vacancy',

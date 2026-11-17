@@ -9,6 +9,7 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { cloudFrontBaseUrl } from './cloudfront-url.js';
 import { StoragePrefix } from './storage-prefix.js';
 
 const PRESIGNED_URL_TTL_SECONDS = 300;
@@ -30,12 +31,9 @@ export class AwsS3Service {
       },
     });
 
-    const domain = config
-      .getOrThrow<string>('CLOUDFRONT_DOMAIN_NAME')
-      .replace(/\/+$/, '');
-    this.publicBaseUrl = /^https?:\/\//.test(domain)
-      ? domain
-      : `https://${domain}`;
+    this.publicBaseUrl = cloudFrontBaseUrl(
+      config.getOrThrow<string>('CLOUDFRONT_DOMAIN_NAME'),
+    );
   }
 
   newKey(prefix: StoragePrefix): string {

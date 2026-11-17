@@ -14,6 +14,9 @@ import {
   PlanNoticeEmailProps,
   renderPlanNoticeEmail,
 } from '../email/templates/plan-notice-email.js';
+import { cloudFrontBaseUrl } from '../aws-s3/cloudfront-url.js';
+import { BRAND } from '../email/brand.js';
+import type { EmailLinks } from '../email/brand.js';
 import { OTP_EXPIRATION_MINUTES } from '../shared/crypto/otp-cooldown.js';
 import { MAIL_TRANSPORT } from './mail-transport.provider.js';
 import type { MailTransport } from './mail-transport.provider.js';
@@ -21,11 +24,20 @@ import type { MailTransport } from './mail-transport.provider.js';
 @Injectable()
 export class EmailSenderService {
   private readonly logger = new Logger(EmailSenderService.name);
+  private readonly links: EmailLinks;
 
   constructor(
     @Inject(MAIL_TRANSPORT) private readonly transport: MailTransport,
     private readonly config: ConfigService,
-  ) {}
+  ) {
+    const cloudFront = cloudFrontBaseUrl(
+      config.getOrThrow<string>('CLOUDFRONT_DOMAIN_NAME'),
+    );
+    this.links = {
+      siteUrl: config.getOrThrow<string>('FRONTEND_URI'),
+      logoUrl: `${cloudFront}/${BRAND.logoKey}`,
+    };
+  }
 
   createVerificationCode(): { code: string; expiresAt: Date } {
     return {
@@ -40,6 +52,14 @@ export class EmailSenderService {
 
   sendPasswordResetCode(to: string, code: string): Promise<void> {
     return this.sendCode(to, code, OtpEmailVariant.PASSWORD_RESET);
+  }
+
+  sendEmailChangeCurrentCode(to: string, code: string): Promise<void> {
+    return this.sendCode(to, code, OtpEmailVariant.EMAIL_CHANGE_CURRENT);
+  }
+
+  sendEmailChangeNewCode(to: string, code: string): Promise<void> {
+    return this.sendCode(to, code, OtpEmailVariant.EMAIL_CHANGE_NEW);
   }
 
   sendPlanEndedNotice(to: string, planName: string): Promise<void> {
@@ -76,7 +96,10 @@ export class EmailSenderService {
   }
 
   async sendNotice(to: string, props: PlanNoticeEmailProps): Promise<void> {
-    const { subject, html, text } = await renderPlanNoticeEmail(props);
+    const { subject, html, text } = await renderPlanNoticeEmail(
+      props,
+      this.links,
+    );
 
     try {
       await this.transport.sendMail({
@@ -100,11 +123,10 @@ export class EmailSenderService {
     code: string,
     variant: OtpEmailVariant,
   ): Promise<void> {
-    const { subject, html, text } = await renderOtpEmail({
-      code,
-      expiresInMinutes: OTP_EXPIRATION_MINUTES,
-      variant,
-    });
+    const { subject, html, text } = await renderOtpEmail(
+      { code, expiresInMinutes: OTP_EXPIRATION_MINUTES, variant },
+      this.links,
+    );
 
     try {
       await this.transport.sendMail({

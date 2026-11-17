@@ -100,7 +100,7 @@ export class EmailChangeService {
     await this.assertEmailAvailable(newEmail);
 
     const { code, expiresAt } = this.emailSender.createVerificationCode();
-    await this.emailSender.sendVerificationCode(account.email, code);
+    await this.emailSender.sendEmailChangeCurrentCode(account.email, code);
     await store.startEmailChange(
       accountId,
       newEmail,
@@ -153,7 +153,7 @@ export class EmailChangeService {
     pendingEmail: string,
   ): Promise<{ message: string }> {
     const { code, expiresAt } = this.emailSender.createVerificationCode();
-    await this.emailSender.sendVerificationCode(pendingEmail, code);
+    await this.emailSender.sendEmailChangeNewCode(pendingEmail, code);
     await store.setEmailChangeCode(
       accountId,
       hashOtp(code, this.otpSecret()),

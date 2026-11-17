@@ -1,19 +1,15 @@
-import {
-  Body,
-  Container,
-  Head,
-  Heading,
-  Html,
-  Preview,
-  Section,
-  Text,
-} from '@react-email/components';
+import { Section, Text } from '@react-email/components';
 import { render } from '@react-email/render';
 import { createElement } from 'react';
+import { BRAND_COLORS, BRAND_FONTS, BRAND_RADIUS } from '../brand.js';
+import type { EmailLinks } from '../brand.js';
+import { EmailFinePrint, EmailLayout, EmailParagraph } from './email-layout.js';
 
 export enum OtpEmailVariant {
   VERIFICATION = 'verification',
   PASSWORD_RESET = 'passwordReset',
+  EMAIL_CHANGE_CURRENT = 'emailChangeCurrent',
+  EMAIL_CHANGE_NEW = 'emailChangeNew',
 }
 
 export interface OtpEmailProps {
@@ -33,6 +29,18 @@ const copyByVariant = {
     heading: 'Reset your password',
     intro: 'Use this code to reset your password.',
   },
+  [OtpEmailVariant.EMAIL_CHANGE_CURRENT]: {
+    subject: 'Confirm your GetDreamJob email change',
+    heading: 'Confirm your email change',
+    intro:
+      'Use this code to confirm that you want to change the email of your GetDreamJob account to a new address.',
+  },
+  [OtpEmailVariant.EMAIL_CHANGE_NEW]: {
+    subject: 'Confirm your new GetDreamJob email',
+    heading: 'Confirm your new email',
+    intro:
+      'Use this code to confirm this address as the new email of your GetDreamJob account.',
+  },
 } satisfies Record<
   OtpEmailVariant,
   { subject: string; heading: string; intro: string }
@@ -42,71 +50,53 @@ export function OtpEmail({
   code,
   expiresInMinutes,
   variant = OtpEmailVariant.VERIFICATION,
-}: OtpEmailProps) {
+  links,
+}: OtpEmailProps & { links: EmailLinks }) {
   const { subject, heading, intro } = copyByVariant[variant];
 
   return createElement(
-    Html,
-    { lang: 'en' },
-    createElement(Head),
-    createElement(Preview, null, `${subject} is ${code}`),
+    EmailLayout,
+    { preview: `${subject} is ${code}`, heading, links },
     createElement(
-      Body,
-      {
-        style: { backgroundColor: '#f4f4f5', fontFamily: 'Arial, sans-serif' },
-      },
+      EmailParagraph,
+      null,
+      `${intro} It expires in ${expiresInMinutes} minutes.`,
+    ),
+    createElement(
+      Section,
+      { style: { textAlign: 'center', margin: '28px 0 8px' } },
       createElement(
-        Container,
+        Text,
         {
           style: {
-            backgroundColor: '#ffffff',
-            borderRadius: 8,
-            margin: '24px auto',
-            padding: 32,
-            maxWidth: 480,
+            display: 'inline-block',
+            margin: 0,
+            padding: '14px 28px',
+            backgroundColor: BRAND_COLORS.porcelain,
+            border: `2px solid ${BRAND_COLORS.ink}`,
+            borderRadius: BRAND_RADIUS.control,
+            fontFamily: BRAND_FONTS.display,
+            fontSize: 36,
+            fontWeight: 700,
+            lineHeight: '1',
+            letterSpacing: '10px',
+            fontVariantNumeric: 'tabular-nums',
+            color: BRAND_COLORS.ink,
           },
         },
-        createElement(
-          Heading,
-          { as: 'h1', style: { fontSize: 22, margin: '0 0 16px' } },
-          heading,
-        ),
-        createElement(
-          Text,
-          { style: { fontSize: 15, color: '#3f3f46' } },
-          `${intro} It expires in ${expiresInMinutes} minutes.`,
-        ),
-        createElement(
-          Section,
-          { style: { textAlign: 'center', margin: '24px 0' } },
-          createElement(
-            Text,
-            {
-              style: {
-                display: 'inline-block',
-                fontSize: 32,
-                fontWeight: 700,
-                letterSpacing: 8,
-                padding: '12px 24px',
-                backgroundColor: '#f4f4f5',
-                borderRadius: 6,
-              },
-            },
-            code,
-          ),
-        ),
-        createElement(
-          Text,
-          { style: { fontSize: 13, color: '#71717a' } },
-          'If you requested more than one code, only the newest one works. If you did not request this, you can ignore this email.',
-        ),
+        code,
       ),
+    ),
+    createElement(
+      EmailFinePrint,
+      null,
+      'If you requested more than one code, only the newest one works. If you did not request this, you can ignore this email.',
     ),
   );
 }
 
-export async function renderOtpEmail(props: OtpEmailProps) {
-  const element = createElement(OtpEmail, props);
+export async function renderOtpEmail(props: OtpEmailProps, links: EmailLinks) {
+  const element = createElement(OtpEmail, { ...props, links });
   const [html, text] = await Promise.all([
     render(element),
     render(element, { plainText: true }),
