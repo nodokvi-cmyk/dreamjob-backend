@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
 import { Application } from '../../applications/schema/application.schema.js';
 import { Company } from '../../companies/schema/company.schema.js';
 import { Publication } from '../../publications/schema/publication.schema.js';
@@ -21,16 +21,16 @@ export const MAX_INVITATION_MESSAGE_WORDS = 100;
 
 @Schema({ timestamps: true })
 export class Invitation {
-  @Prop({ type: Types.ObjectId, ref: Publication.name, required: true })
+  @Prop({ type: SchemaTypes.ObjectId, ref: Publication.name, required: true })
   publication!: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: User.name, required: true })
+  @Prop({ type: SchemaTypes.ObjectId, ref: User.name, required: true })
   user!: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: Company.name, required: true })
+  @Prop({ type: SchemaTypes.ObjectId, ref: Company.name, required: true })
   company!: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: Vacancy.name, required: true })
+  @Prop({ type: SchemaTypes.ObjectId, ref: Vacancy.name, required: true })
   vacancy!: Types.ObjectId;
 
   @Prop({
@@ -51,7 +51,7 @@ export class Invitation {
   @Prop({ type: String, required: true, trim: true, maxlength: 128 })
   publicationTitle!: string;
 
-  @Prop({ type: Types.ObjectId, ref: Application.name, required: false })
+  @Prop({ type: SchemaTypes.ObjectId, ref: Application.name, required: false })
   application?: Types.ObjectId;
 
   @Prop({ type: Date, required: false })

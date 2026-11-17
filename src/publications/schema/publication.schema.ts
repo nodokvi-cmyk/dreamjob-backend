@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
 import { User } from '../../users/schema/user.schema.js';
 import {
   Currency,
@@ -33,7 +33,7 @@ export const PUBLICATION_LIFETIME_DAYS = 60;
 
 @Schema({ timestamps: true })
 export class Publication {
-  @Prop({ type: Types.ObjectId, ref: User.name, required: true })
+  @Prop({ type: SchemaTypes.ObjectId, ref: User.name, required: true })
   user!: Types.ObjectId;
 
   @Prop({ type: String, required: true, trim: true, maxlength: 128 })

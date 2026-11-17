@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Types } from 'mongoose';
+import { SchemaTypes, Types } from 'mongoose';
 
 @Schema({ timestamps: true })
 export class EmailClaim {
@@ -13,7 +13,7 @@ export class EmailClaim {
   })
   email!: string;
 
-  @Prop({ type: Types.ObjectId, required: true, index: true })
+  @Prop({ type: SchemaTypes.ObjectId, required: true, index: true })
   ownerId!: Types.ObjectId;
 
   @Prop({ type: Date, index: { expireAfterSeconds: 0 } })

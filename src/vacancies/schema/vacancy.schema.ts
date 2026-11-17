@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
 import { Company } from '../../companies/schema/company.schema.js';
 
 export enum VacancyStatus {
@@ -127,7 +127,7 @@ export class Vacancy {
   @Prop({ type: [String], default: [] })
   photoKeys!: string[];
 
-  @Prop({ type: Types.ObjectId, ref: Company.name, required: true })
+  @Prop({ type: SchemaTypes.ObjectId, ref: Company.name, required: true })
   company!: Types.ObjectId;
 
   @Prop({

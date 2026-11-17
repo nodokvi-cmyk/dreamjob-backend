@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
 import { User } from '../../users/schema/user.schema.js';
 import { Vacancy } from '../../vacancies/schema/vacancy.schema.js';
 
@@ -45,10 +45,10 @@ export const MAX_APPLICATION_MESSAGE_LENGTH = 800;
 
 @Schema({ timestamps: true })
 export class Application {
-  @Prop({ type: Types.ObjectId, ref: User.name, required: false })
+  @Prop({ type: SchemaTypes.ObjectId, ref: User.name, required: false })
   user?: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: Vacancy.name, required: true })
+  @Prop({ type: SchemaTypes.ObjectId, ref: Vacancy.name, required: true })
   vacancy!: Types.ObjectId;
 
   @Prop({

@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
 import { ApplicationStatus } from '../../applications/schema/application.schema.js';
 import { AuthRole } from '../../shared/types/auth-role.js';
 
@@ -63,16 +63,16 @@ export const notificationDataSchema =
 
 @Schema({ _id: false })
 export class NotificationTarget {
-  @Prop({ type: Types.ObjectId, required: false })
+  @Prop({ type: SchemaTypes.ObjectId, required: false })
   vacancyId?: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, required: false })
+  @Prop({ type: SchemaTypes.ObjectId, required: false })
   applicationId?: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, required: false })
+  @Prop({ type: SchemaTypes.ObjectId, required: false })
   publicationId?: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, required: false })
+  @Prop({ type: SchemaTypes.ObjectId, required: false })
   invitationId?: Types.ObjectId;
 }
 
@@ -81,7 +81,7 @@ export const notificationTargetSchema =
 
 @Schema({ timestamps: true })
 export class Notification {
-  @Prop({ type: Types.ObjectId, required: true })
+  @Prop({ type: SchemaTypes.ObjectId, required: true })
   recipient!: Types.ObjectId;
 
   @Prop({ type: String, enum: NOTIFICATION_RECIPIENT_ROLES, required: true })
