@@ -13,6 +13,7 @@ import {
   otpCooldownError,
   otpCooldownSecondsLeft,
 } from '../shared/crypto/otp-cooldown.js';
+import { PaymentService } from '../payment/payment.service.js';
 import { hashOtp, isOtpValid } from '../shared/crypto/otp-hash.js';
 import { withEmailConflict } from '../shared/mongo/with-email-conflict.js';
 import type {
@@ -32,6 +33,7 @@ export class EmailChangeService {
     private readonly emailClaims: EmailClaimsService,
     private readonly emailSender: EmailSenderService,
     private readonly config: ConfigService,
+    private readonly paymentService: PaymentService,
   ) {}
 
   requestUserEmailChange(
@@ -77,11 +79,18 @@ export class EmailChangeService {
     return this.confirmCurrentEmail(this.companiesService, accountId, code);
   }
 
-  confirmCompanyNewEmail(
+  async confirmCompanyNewEmail(
     accountId: string,
     { code }: CodeDto,
   ): Promise<{ message: string }> {
-    return this.confirmNewEmail(this.companiesService, accountId, code);
+    const result = await this.confirmNewEmail(
+      this.companiesService,
+      accountId,
+      code,
+    );
+    await this.paymentService.syncCustomerEmail(accountId);
+
+    return result;
   }
 
   private async requestEmailChange(
