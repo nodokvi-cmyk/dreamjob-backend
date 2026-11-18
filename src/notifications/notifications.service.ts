@@ -5,7 +5,6 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, QueryFilter, Types } from 'mongoose';
 import { Company } from '../companies/schema/company.schema.js';
@@ -58,7 +57,6 @@ export class NotificationsService {
     @InjectModel(User.name) private readonly userModel: Model<User>,
     @InjectModel(Company.name) private readonly companyModel: Model<Company>,
     private readonly emailSender: EmailSenderService,
-    private readonly config: ConfigService,
   ) {}
 
   async notify(
@@ -111,7 +109,7 @@ export class NotificationsService {
         vacancyId: input.target?.vacancyId,
         invitationId: input.target?.invitationId,
       },
-      this.config.getOrThrow<string>('FRONTEND_URI'),
+      this.emailSender.siteUrl,
     );
     if (!email) return;
 
