@@ -39,6 +39,10 @@ export class EmailSenderService {
     };
   }
 
+  get siteUrl(): string {
+    return this.links.siteUrl;
+  }
+
   createVerificationCode(): { code: string; expiresAt: Date } {
     return {
       code: randomInt(0, 1_000_000).toString().padStart(6, '0'),
@@ -63,7 +67,7 @@ export class EmailSenderService {
   }
 
   sendPlanEndedNotice(to: string, planName: string): Promise<void> {
-    const billingUrl = `${this.config.getOrThrow<string>('FRONTEND_URI')}/company/billing`;
+    const billingUrl = `${this.links.siteUrl}/company/billing`;
 
     return this.sendNotice(to, {
       subject: 'Your GetDreamJob plan has ended',
