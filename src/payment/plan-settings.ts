@@ -5,6 +5,7 @@ export const STRIPE_APP_TAG = 'getdreamjob';
 export const AUTHENTICATION_WAIT_DAYS = 5;
 export const PLAN_END_REASON_KEY = 'planEndReason';
 export const PLAN_END_AUTHENTICATION = 'authentication';
+export const PLAN_END_AT_KEY = 'planEndAt';
 
 export type PaidPlan = BillingPlan.PLUS | BillingPlan.ELITE;
 
