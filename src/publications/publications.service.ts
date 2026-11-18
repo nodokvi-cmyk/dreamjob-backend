@@ -719,6 +719,7 @@ export class PublicationsService {
       ...this.toResponse(publication, false),
       author: authors.get(publication.user.toString()) ?? null,
       invitation: invitation?.status ?? NO_INVITATION,
+      canInvite: invitation?.canInvite ?? true,
       invitationId: invitation?.id ?? null,
       invitedVacancyId: invitation?.vacancyId ?? null,
     };
@@ -768,6 +769,7 @@ export class PublicationsService {
       createdAt: publication.createdAt,
       author: authors.get(publication.user.toString()) ?? null,
       invitation: invitation?.status ?? NO_INVITATION,
+      canInvite: invitation?.canInvite ?? true,
     };
   }
 
