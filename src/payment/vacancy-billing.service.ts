@@ -23,7 +23,12 @@ import {
 } from '../vacancies/schema/vacancy.schema.js';
 import { vacancyViewStatus } from '../vacancies/vacancy-status.js';
 import { claimPayment } from './claim-payment.js';
-import { isPaidPlan, PLAN_SETTINGS, STRIPE_APP_TAG } from './plan-settings.js';
+import {
+  CHECKOUT_PAYMENT_METHODS,
+  isPaidPlan,
+  PLAN_SETTINGS,
+  STRIPE_APP_TAG,
+} from './plan-settings.js';
 import {
   Payment,
   PaymentKind,
@@ -447,6 +452,7 @@ export class VacancyBillingService {
 
     const session = await this.stripe.checkout.sessions.create({
       mode: 'payment',
+      payment_method_configuration: CHECKOUT_PAYMENT_METHODS,
       client_reference_id: companyId,
       customer: customerId,
       saved_payment_method_options: {

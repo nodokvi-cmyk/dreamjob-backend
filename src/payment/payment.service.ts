@@ -19,6 +19,7 @@ import { BillingPlan } from '../shared/types/billing-plan.js';
 import { claimPayment } from './claim-payment.js';
 import {
   AUTHENTICATION_WAIT_DAYS,
+  CHECKOUT_PAYMENT_METHODS,
   isPaidPlan,
   PaidPlan,
   PLAN_END_AT_KEY,
@@ -104,6 +105,7 @@ export class PaymentService {
 
     const session = await this.stripe.checkout.sessions.create({
       mode: 'subscription',
+      payment_method_configuration: CHECKOUT_PAYMENT_METHODS,
       customer: customerId,
       client_reference_id: companyId,
       line_items: [{ price: PLAN_SETTINGS[plan].priceId, quantity: 1 }],

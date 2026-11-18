@@ -2,6 +2,8 @@ import { BillingPlan } from '../shared/types/billing-plan.js';
 
 export const STRIPE_APP_TAG = 'getdreamjob';
 
+export const CHECKOUT_PAYMENT_METHODS = 'pmc_1UdD7JLQGK6RLTYUefjcowlp';
+
 export const AUTHENTICATION_WAIT_DAYS = 5;
 export const PLAN_END_REASON_KEY = 'planEndReason';
 export const PLAN_END_AUTHENTICATION = 'authentication';
