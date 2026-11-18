@@ -584,7 +584,7 @@ export class ApplicationsService {
         {
           _id: id,
           user: { $exists: true },
-          status: { $ne: ApplicationStatus.WITHDRAWN },
+          status: application.status,
         },
         { $set: { status } },
         { new: true },
