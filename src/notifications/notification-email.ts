@@ -36,6 +36,8 @@ function statusChangeSubject(data: NotificationData): string {
       return `Interview stage for ${vacancy} on GetDreamJob`;
     case ApplicationStatus.ACCEPTED:
       return `Your application for ${vacancy} was accepted`;
+    case ApplicationStatus.REJECTED:
+      return `Your application for ${vacancy} was rejected`;
     default:
       return `Update on your application for ${vacancy}`;
   }
