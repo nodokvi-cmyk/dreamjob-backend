@@ -55,9 +55,15 @@ import {
   Invitation,
   InvitationRecord,
   InvitationStatus,
+  MAX_INVITATION_SENDS,
 } from './schema/invitation.schema.js';
 
 type InvitationFilter = QueryFilter<Invitation>;
+
+type NewInvitation = Omit<
+  Invitation,
+  'status' | 'sends' | 'application' | 'respondedAt' | 'createdAt' | 'updatedAt'
+>;
 
 type InviteVacancy = Pick<
   VacancyRecord,
@@ -90,6 +96,7 @@ export type CompanyInvitation = {
   status: InvitationStatus;
   vacancyId: string;
   grantsAccess: boolean;
+  canInvite: boolean;
 };
 
 type AccessSource = Pick<InvitationRecord, '_id' | 'status' | 'application'>;
@@ -121,6 +128,7 @@ export class InvitationsService {
     return {
       id: invitation._id.toString(),
       status: invitation.status,
+      sends: invitation.sends ?? 1,
       message: invitation.message ?? '',
       publication: invitation.publication.toString(),
       vacancy: invitation.vacancy.toString(),
@@ -165,7 +173,7 @@ export class InvitationsService {
       );
     }
 
-    const invitation = await this.insert({
+    const { invitation, reinvited } = await this.createOrReinvite({
       publication: publication._id,
       user: publication.user,
       company: new Types.ObjectId(companyId),
@@ -177,7 +185,7 @@ export class InvitationsService {
     await this.removeIfOrphaned(invitation, companyId);
 
     if (!(await this.spendInvite(companyId))) {
-      await this.invitationModel.deleteOne({ _id: invitation._id });
+      await this.undoSend(invitation._id, reinvited);
       const { limit } = await this.quota(companyId);
       throw new BadRequestException(
         `Monthly invitation limit reached (${limit}). It resets at the start of next month (UTC).`,
@@ -220,16 +228,22 @@ export class InvitationsService {
       );
     }
 
-    const { deletedCount } = await this.invitationModel.deleteOne({
-      _id: id,
-      company: invitation.company,
-      status: InvitationStatus.INVITED,
-    });
-    if (deletedCount === 0) {
+    const cancelled = await this.invitationModel
+      .findOneAndUpdate(
+        {
+          _id: id,
+          company: invitation.company,
+          status: InvitationStatus.INVITED,
+        },
+        { $set: { status: InvitationStatus.CANCELLED } },
+        { new: true },
+      )
+      .lean<InvitationRecord>();
+    if (!cancelled) {
       throw new ConflictException('Invitation changed, try again');
     }
 
-    return this.toResponse(invitation);
+    return this.toResponse(cancelled);
   }
 
   async quota(companyId: string) {
@@ -331,7 +345,7 @@ export class InvitationsService {
     const { take, status, vacancyId, focus } = query;
     const filter: InvitationFilter = {
       user: new Types.ObjectId(userId),
-      ...(status ? { status } : {}),
+      status: status ?? { $ne: InvitationStatus.CANCELLED },
       ...(vacancyId ? { vacancy: new Types.ObjectId(vacancyId) } : {}),
     };
     const focusPage = focus
@@ -503,9 +517,10 @@ export class InvitationsService {
         company: new Types.ObjectId(companyId),
         publication: { $in: publicationIds },
       })
-      .select('publication status vacancy application')
+      .select('publication status sends vacancy application')
       .lean<
-        (AccessSource & Pick<InvitationRecord, 'publication' | 'vacancy'>)[]
+        (AccessSource &
+          Pick<InvitationRecord, 'publication' | 'vacancy' | 'sends'>)[]
       >();
     const granting = await this.accessGrantingIds(invitations);
 
@@ -517,6 +532,9 @@ export class InvitationsService {
           status: invitation.status,
           vacancyId: invitation.vacancy.toString(),
           grantsAccess: granting.has(invitation._id.toString()),
+          canInvite:
+            invitation.status === InvitationStatus.CANCELLED &&
+            (invitation.sends ?? 1) < MAX_INVITATION_SENDS,
         },
       ]),
     );
@@ -587,22 +605,62 @@ export class InvitationsService {
     );
   }
 
-  private async insert(
-    fields: Omit<
-      Invitation,
-      'status' | 'application' | 'respondedAt' | 'createdAt' | 'updatedAt'
-    >,
-  ): Promise<InvitationRecord> {
+  private async createOrReinvite(
+    fields: NewInvitation,
+  ): Promise<{ invitation: InvitationRecord; reinvited: boolean }> {
     try {
       const created = await this.invitationModel.create(fields);
 
-      return created.toObject();
+      return { invitation: created.toObject(), reinvited: false };
     } catch (error: unknown) {
-      if (isDuplicateKeyError(error)) {
-        throw new ConflictException('You already invited this publication');
-      }
-      throw error;
+      if (!isDuplicateKeyError(error)) throw error;
     }
+
+    const pair = { publication: fields.publication, company: fields.company };
+    const reinvited = await this.invitationModel
+      .findOneAndUpdate(
+        {
+          ...pair,
+          status: InvitationStatus.CANCELLED,
+          sends: { $not: { $gte: MAX_INVITATION_SENDS } },
+        },
+        {
+          $set: {
+            status: InvitationStatus.INVITED,
+            sends: MAX_INVITATION_SENDS,
+            user: fields.user,
+            vacancy: fields.vacancy,
+            publicationTitle: fields.publicationTitle,
+            ...(fields.message ? { message: fields.message } : {}),
+          },
+          ...(fields.message ? {} : { $unset: { message: '' } }),
+        },
+        { new: true },
+      )
+      .lean<InvitationRecord>();
+    if (reinvited) return { invitation: reinvited, reinvited: true };
+
+    const existing = await this.invitationModel
+      .findOne(pair)
+      .select('status')
+      .lean<Pick<InvitationRecord, 'status'>>();
+    throw new ConflictException(
+      existing?.status === InvitationStatus.CANCELLED
+        ? `A publication can be invited at most ${MAX_INVITATION_SENDS} times`
+        : 'You already invited this publication',
+    );
+  }
+
+  private async undoSend(id: Types.ObjectId, reinvited: boolean) {
+    if (!reinvited) {
+      await this.invitationModel.deleteOne({ _id: id });
+      return;
+    }
+
+    await this.invitationModel.updateOne(
+      { _id: id, status: InvitationStatus.INVITED },
+      { $set: { status: InvitationStatus.CANCELLED, sends: 1 } },
+    );
   }
 
   private async removeIfOrphaned(
@@ -717,6 +775,9 @@ export class InvitationsService {
     if (!invitation) throw new NotFoundException('Invitation not found');
     if (invitation.user.toString() !== userId) {
       throw new ForbiddenException('No permission');
+    }
+    if (invitation.status === InvitationStatus.CANCELLED) {
+      throw new NotFoundException('Invitation not found');
     }
     if (invitation.status !== InvitationStatus.INVITED) {
       throw new BadRequestException('This invitation was already answered');
