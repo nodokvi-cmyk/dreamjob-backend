@@ -210,7 +210,7 @@ export class UsersService implements EmailChangeStore {
   private isOwner(user: UserDocument, viewer: Viewer | null): boolean {
     return (
       viewer !== null &&
-      viewer.accountRole === AuthRole.USER &&
+      viewer.accountRole !== AuthRole.COMPANY &&
       viewer.accountId === user.id
     );
   }
