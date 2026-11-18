@@ -10,9 +10,18 @@ export enum InvitationStatus {
   INVITED = 'invited',
   ACCEPTED = 'accepted',
   DECLINED = 'declined',
+  CANCELLED = 'cancelled',
 }
 
 export const NO_INVITATION = 'none';
+
+export const MAX_INVITATION_SENDS = 2;
+
+export const USER_VISIBLE_INVITATION_STATUSES = [
+  InvitationStatus.INVITED,
+  InvitationStatus.ACCEPTED,
+  InvitationStatus.DECLINED,
+] as const;
 
 export type InvitationState = InvitationStatus | typeof NO_INVITATION;
 
@@ -39,6 +48,9 @@ export class Invitation {
     default: InvitationStatus.INVITED,
   })
   status!: InvitationStatus;
+
+  @Prop({ type: Number, default: 1, min: 1, max: MAX_INVITATION_SENDS })
+  sends?: number;
 
   @Prop({
     type: String,
