@@ -21,6 +21,7 @@ import {
   AUTHENTICATION_WAIT_DAYS,
   isPaidPlan,
   PaidPlan,
+  PLAN_END_AT_KEY,
   PLAN_END_AUTHENTICATION,
   PLAN_END_REASON_KEY,
   PLAN_SETTINGS,
@@ -34,6 +35,33 @@ import { VacancyBillingService } from './vacancy-billing.service.js';
 function idOf(value: string | { id: string } | null | undefined) {
   if (!value) return undefined;
   return typeof value === 'string' ? value : value.id;
+}
+
+const ENDED_SUBSCRIPTION_STATUSES: readonly Stripe.Subscription.Status[] = [
+  'canceled',
+  'incomplete_expired',
+];
+
+function intentIdsOf(payments: Stripe.InvoicePayment[]) {
+  return payments
+    .map((item) => idOf(item.payment.payment_intent))
+    .filter((id): id is string => id !== undefined);
+}
+
+function authenticationWaitEnd(
+  subscription: Stripe.Subscription,
+): number | undefined {
+  if (subscription.metadata[PLAN_END_REASON_KEY] !== PLAN_END_AUTHENTICATION) {
+    return undefined;
+  }
+
+  const stored = Number(subscription.metadata[PLAN_END_AT_KEY]);
+  if (Number.isInteger(stored) && stored > 0) return stored;
+
+  return (
+    subscription.cancel_at ??
+    Math.floor(Date.now() / 1000) + AUTHENTICATION_WAIT_DAYS * 86_400
+  );
 }
 
 @Injectable()
@@ -68,6 +96,9 @@ export class PaymentService {
       this.companyModel,
       company,
     );
+    await this.assertNoLiveSubscription(customerId);
+    await this.expireOpenPlanSessions(customerId);
+
     const frontend = this.config.getOrThrow<string>('FRONTEND_URI');
     const metadata = { app: STRIPE_APP_TAG, companyId, plan };
 
@@ -86,6 +117,70 @@ export class PaymentService {
     }
 
     return { url: session.url };
+  }
+
+  private async assertNoLiveSubscription(customerId: string) {
+    const subscriptions = await this.stripe.subscriptions.list({
+      customer: customerId,
+      status: 'all',
+      limit: 20,
+    });
+    const live = subscriptions.data.some(
+      (subscription) =>
+        subscription.metadata.app === STRIPE_APP_TAG &&
+        !ENDED_SUBSCRIPTION_STATUSES.includes(subscription.status),
+    );
+    if (live) {
+      throw new BadRequestException(
+        'Cancel your current plan before choosing another one',
+      );
+    }
+  }
+
+  private async expireOpenPlanSessions(customerId: string) {
+    const sessions = await this.stripe.checkout.sessions.list({
+      customer: customerId,
+      status: 'open',
+      limit: 20,
+    });
+
+    await Promise.all(
+      sessions.data
+        .filter(
+          (session) =>
+            session.mode === 'subscription' &&
+            session.metadata?.app === STRIPE_APP_TAG,
+        )
+        .map((session) => this.expireSessionQuietly(session.id)),
+    );
+  }
+
+  private async expireSessionQuietly(sessionId: string) {
+    try {
+      await this.stripe.checkout.sessions.expire(sessionId);
+    } catch (error: unknown) {
+      this.logger.warn(
+        error instanceof Error ? error.message : 'Could not expire session',
+      );
+    }
+  }
+
+  async syncCustomerEmail(companyId: string): Promise<void> {
+    try {
+      const company = await this.companyModel
+        .findById(companyId)
+        .select('+stripeCustomerId');
+      if (!company?.stripeCustomerId) return;
+
+      await this.stripe.customers.update(company.stripeCustomerId, {
+        email: company.email,
+      });
+    } catch (error: unknown) {
+      this.logger.error(
+        'Stripe customer email was not updated',
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
   }
 
   async createPortalSession(companyId: string) {
@@ -229,8 +324,14 @@ export class PaymentService {
         await this.stripe.subscriptions.retrieve(subscriptionId);
       const periodEnd = subscription.items.data[0]?.current_period_end;
 
-      await this.companyModel.updateOne(
-        { _id: companyId },
+      const linked = await this.companyModel.updateOne(
+        {
+          _id: companyId,
+          $or: [
+            { stripeSubscriptionId: { $exists: false } },
+            { stripeSubscriptionId: subscriptionId },
+          ],
+        },
         {
           $set: {
             plan,
@@ -245,8 +346,58 @@ export class PaymentService {
           },
         },
       );
+      if (
+        linked.matchedCount === 0 &&
+        (await this.companyModel.exists({ _id: companyId }))
+      ) {
+        await this.refundDuplicateSubscription(
+          subscriptionId,
+          idOf(session.invoice),
+        );
+      }
     } catch (error: unknown) {
       await this.paymentModel.deleteOne({ stripeSessionId: session.id });
+      throw error;
+    }
+  }
+
+  private async refundDuplicateSubscription(
+    subscriptionId: string,
+    invoiceId: string | undefined,
+  ) {
+    this.logger.warn(
+      `Duplicate subscription ${subscriptionId} is being cancelled and refunded`,
+    );
+
+    const subscription =
+      await this.stripe.subscriptions.retrieve(subscriptionId);
+    if (!ENDED_SUBSCRIPTION_STATUSES.includes(subscription.status)) {
+      await this.stripe.subscriptions.cancel(subscriptionId);
+    }
+    if (!invoiceId) return;
+
+    const payments = await this.stripe.invoicePayments.list({
+      invoice: invoiceId,
+    });
+    const paid = payments.data.filter((item) => item.status === 'paid');
+    await Promise.all(
+      intentIdsOf(paid).map((intentId) => this.refundIntent(intentId)),
+    );
+  }
+
+  private async refundIntent(intentId: string) {
+    try {
+      await this.stripe.refunds.create({
+        payment_intent: intentId,
+        metadata: { app: STRIPE_APP_TAG },
+      });
+    } catch (error: unknown) {
+      if (
+        error instanceof Stripe.errors.StripeError &&
+        error.code === 'charge_already_refunded'
+      ) {
+        return;
+      }
       throw error;
     }
   }
@@ -289,24 +440,33 @@ export class PaymentService {
       subscription.metadata[PLAN_END_REASON_KEY] === PLAN_END_AUTHENTICATION
     ) {
       await this.stripe.subscriptions.update(subscriptionId, {
-        cancel_at: '',
-        metadata: { [PLAN_END_REASON_KEY]: '' },
+        cancel_at: company.planEndsAtPeriodEnd ? periodEnd : '',
+        metadata: { [PLAN_END_REASON_KEY]: '', [PLAN_END_AT_KEY]: '' },
       });
     }
   }
 
-  private async markPlanEnding(subscription: Stripe.Subscription) {
-    if (subscription.metadata.app !== STRIPE_APP_TAG) return;
+  private async markPlanEnding(event: Stripe.Subscription) {
+    if (event.metadata.app !== STRIPE_APP_TAG) return;
 
-    const ending =
-      subscription.cancel_at_period_end ||
-      (subscription.cancel_at !== null &&
-        subscription.metadata[PLAN_END_REASON_KEY] !== PLAN_END_AUTHENTICATION);
+    const subscription = await this.stripe.subscriptions.retrieve(event.id);
+    const waitEnd = authenticationWaitEnd(subscription);
+    const cancelAt = subscription.cancel_at;
+    const atPeriodEnd = subscription.cancel_at_period_end;
+    if (waitEnd !== undefined && cancelAt === waitEnd && !atPeriodEnd) return;
 
     await this.companyModel.updateOne(
       { stripeSubscriptionId: subscription.id },
-      { $set: { planEndsAtPeriodEnd: ending } },
+      { $set: { planEndsAtPeriodEnd: atPeriodEnd || cancelAt !== null } },
     );
+
+    if (waitEnd === undefined) return;
+    if (cancelAt !== null && cancelAt <= waitEnd) return;
+
+    await this.stripe.subscriptions.update(subscription.id, {
+      cancel_at: waitEnd,
+      metadata: { [PLAN_END_AT_KEY]: String(waitEnd) },
+    });
   }
 
   private async findRenewalTarget(invoice: Stripe.Invoice) {
@@ -332,15 +492,13 @@ export class PaymentService {
     const payments = await this.stripe.invoicePayments.list({
       invoice: invoice.id,
     });
-    for (const item of payments.data) {
-      const intentId = idOf(item.payment.payment_intent);
-      if (!intentId) continue;
+    const intents = await Promise.all(
+      intentIdsOf(payments.data).map((intentId) =>
+        this.stripe.paymentIntents.retrieve(intentId),
+      ),
+    );
 
-      const intent = await this.stripe.paymentIntents.retrieve(intentId);
-      if (intent.status === 'requires_action') return true;
-    }
-
-    return false;
+    return intents.some((intent) => intent.status === 'requires_action');
   }
 
   private async waitForAuthentication(invoice: Stripe.Invoice) {
@@ -360,7 +518,10 @@ export class PaymentService {
       Math.floor(Date.now() / 1000) + AUTHENTICATION_WAIT_DAYS * 86_400;
     await this.stripe.subscriptions.update(subscriptionId, {
       cancel_at: cancelAt,
-      metadata: { [PLAN_END_REASON_KEY]: PLAN_END_AUTHENTICATION },
+      metadata: {
+        [PLAN_END_REASON_KEY]: PLAN_END_AUTHENTICATION,
+        [PLAN_END_AT_KEY]: String(cancelAt),
+      },
     });
 
     await this.notifications.notify(company.id, AuthRole.COMPANY, {
