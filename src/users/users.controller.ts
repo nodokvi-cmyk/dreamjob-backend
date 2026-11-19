@@ -23,6 +23,7 @@ import { IsValidMongoIdDto } from '../shared/dto/is-valid-mongo-id.dto.js';
 import { PaginationDto } from '../shared/dto/pagination.dto.js';
 import { strictThrottle } from '../shared/throttle/strict-throttle.js';
 import { Throttle } from '../shared/throttle/throttle.decorator.js';
+import { uploadThrottle } from '../shared/throttle/upload-throttle.js';
 import { AuthRole } from '../shared/types/auth-role.js';
 import { OptionalViewer } from '../shared/decorators/optional-viewer.decorator.js';
 import type { Viewer } from '../shared/types/viewer.js';
@@ -95,6 +96,7 @@ export class UsersController {
 
   @Patch(':id/avatar')
   @UseGuards(IsAuthGuard, RolesGuard)
+  @Throttle(uploadThrottle)
   @UseInterceptors(FileInterceptor('avatar', { limits: uploadLimits }))
   setAvatar(
     @Param() { id }: IsValidMongoIdDto,
@@ -119,6 +121,7 @@ export class UsersController {
 
   @Patch(':id/cv')
   @UseGuards(IsAuthGuard, RolesGuard)
+  @Throttle(uploadThrottle)
   @UseInterceptors(FileInterceptor('cv', { limits: uploadLimits }))
   setCv(
     @Param() { id }: IsValidMongoIdDto,

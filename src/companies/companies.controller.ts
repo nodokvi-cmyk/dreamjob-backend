@@ -23,6 +23,7 @@ import { IsValidMongoIdDto } from '../shared/dto/is-valid-mongo-id.dto.js';
 import { PaginationDto } from '../shared/dto/pagination.dto.js';
 import { strictThrottle } from '../shared/throttle/strict-throttle.js';
 import { Throttle } from '../shared/throttle/throttle.decorator.js';
+import { uploadThrottle } from '../shared/throttle/upload-throttle.js';
 import { AuthRole } from '../shared/types/auth-role.js';
 import { CompaniesService } from './companies.service.js';
 import { ChoosePlanDto } from './dto/choose-plan.dto.js';
@@ -113,6 +114,7 @@ export class CompaniesController {
 
   @Patch(':id/logo')
   @UseGuards(IsAuthGuard, RolesGuard)
+  @Throttle(uploadThrottle)
   @UseInterceptors(FileInterceptor('logo', { limits: uploadLimits }))
   setLogo(
     @Param() { id }: IsValidMongoIdDto,

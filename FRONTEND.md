@@ -18,7 +18,7 @@ Visible occurrences found in the frontend `src/` on 2026-11-04 (change each to G
 - Auth: `Authorization: Bearer <token>`. Token from sign-in, verify-email or Google, kept in `localStorage['token']`, valid 1 hour.
 - One `services/api.ts` wrapper adds the header and throws `Error(message)` on non-2xx. Error body: `{ statusCode, message, error }`; `message` can be a string or a string array (validation).
 - One service module per backend resource. Global state in contexts (`AuthContext`). Gate pages with `ProtectedRoute` and `AdminRoute`.
-- Rate limit: 429 `Too Many Requests` (30 per minute per IP, 5 per minute on sensitive routes). Show a calm "try again in a minute".
+- Rate limit: 429 `Too Many Requests` (30 per minute per IP, 5 per minute on sensitive routes, 10 per minute on file uploads: avatar, CV, logo, vacancy photos and create, publication CV and cover letter). Show a calm "try again in a minute".
 - Lists return `{ items, total, page, take }`. Query `page` (default 1), `take` (default 10, max 30).
 - Roles in the token: `user`, `admin`, `company`. `GET /auth/me` tells which one you are.
 - **Salary display (decided 2026-11-15):** one shared component for vacancies and publications, on every card, detail page, list and board. `salaryMin` and `salaryMax` are each `null` when not set and independent of each other:

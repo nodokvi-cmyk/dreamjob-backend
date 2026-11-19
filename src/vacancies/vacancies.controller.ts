@@ -27,6 +27,7 @@ import { Roles } from '../shared/decorators/roles.decorator.js';
 import { IsValidMongoIdDto } from '../shared/dto/is-valid-mongo-id.dto.js';
 import { strictThrottle } from '../shared/throttle/strict-throttle.js';
 import { Throttle } from '../shared/throttle/throttle.decorator.js';
+import { uploadThrottle } from '../shared/throttle/upload-throttle.js';
 import { AuthRole } from '../shared/types/auth-role.js';
 import type { Viewer } from '../shared/types/viewer.js';
 import { CreateVacancyDto } from './dto/create-vacancy.dto.js';
@@ -88,6 +89,7 @@ export class VacanciesController {
   @Post()
   @UseGuards(IsAuthGuard, RolesGuard)
   @Roles(AuthRole.COMPANY)
+  @Throttle(uploadThrottle)
   @UseInterceptors(photosInterceptor)
   create(
     @AccountId() accountId: string,
@@ -156,6 +158,7 @@ export class VacanciesController {
   @Post(':id/photos')
   @UseGuards(IsAuthGuard, RolesGuard)
   @Roles(AuthRole.COMPANY)
+  @Throttle(uploadThrottle)
   @UseInterceptors(photosInterceptor)
   addPhotos(
     @Param() { id }: IsValidMongoIdDto,

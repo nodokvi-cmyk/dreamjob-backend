@@ -22,6 +22,8 @@ import { AccountId } from '../shared/decorators/account-id.decorator.js';
 import { AccountRole } from '../shared/decorators/account-role.decorator.js';
 import { Roles } from '../shared/decorators/roles.decorator.js';
 import { IsValidMongoIdDto } from '../shared/dto/is-valid-mongo-id.dto.js';
+import { Throttle } from '../shared/throttle/throttle.decorator.js';
+import { uploadThrottle } from '../shared/throttle/upload-throttle.js';
 import { AuthRole } from '../shared/types/auth-role.js';
 import { AcceptingInvitesDto } from './dto/accepting-invites.dto.js';
 import { CreatePublicationDto } from './dto/create-publication.dto.js';
@@ -174,6 +176,7 @@ export class PublicationsController {
   @Patch(':id/cv')
   @UseGuards(IsAuthGuard, RolesGuard)
   @Roles(AuthRole.USER)
+  @Throttle(uploadThrottle)
   @UseInterceptors(cvInterceptor)
   setCv(
     @Param() { id }: IsValidMongoIdDto,
@@ -186,6 +189,7 @@ export class PublicationsController {
   @Patch(':id/cover-letter')
   @UseGuards(IsAuthGuard, RolesGuard)
   @Roles(AuthRole.USER)
+  @Throttle(uploadThrottle)
   @UseInterceptors(coverLetterInterceptor)
   setCoverLetter(
     @Param() { id }: IsValidMongoIdDto,
