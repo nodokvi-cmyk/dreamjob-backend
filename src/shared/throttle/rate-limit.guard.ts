@@ -6,6 +6,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { SharedRateCounter } from './shared-rate-counter.js';
 import { THROTTLE_KEY } from './throttle.decorator.js';
 import type { ThrottleLimit, ThrottleOptions } from './throttle.decorator.js';
 
@@ -17,13 +18,20 @@ interface Bucket {
 const DEFAULT_LIMIT: ThrottleLimit = { limit: 30, ttl: 60_000 };
 const SWEEP_THRESHOLD = 10_000;
 
+function tooManyRequests(): HttpException {
+  return new HttpException('Too Many Requests', HttpStatus.TOO_MANY_REQUESTS);
+}
+
 @Injectable()
 export class RateLimitGuard implements CanActivate {
   private readonly buckets = new Map<string, Bucket>();
 
-  constructor(private readonly reflector: Reflector) {}
+  constructor(
+    private readonly reflector: Reflector,
+    private readonly sharedCounter: SharedRateCounter,
+  ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const options = this.reflector.getAllAndOverride<
       ThrottleOptions | undefined
     >(THROTTLE_KEY, [context.getHandler(), context.getClass()]);
@@ -37,6 +45,27 @@ export class RateLimitGuard implements CanActivate {
       this.sweep(now);
     }
 
+    if (!this.takeLocal(key, limit, ttl, now)) {
+      throw tooManyRequests();
+    }
+
+    if (!options?.shared) {
+      return true;
+    }
+
+    const sharedCount = await this.sharedCounter.increment(key, ttl, now);
+    if (sharedCount !== null && sharedCount > limit) {
+      throw tooManyRequests();
+    }
+    return true;
+  }
+
+  private takeLocal(
+    key: string,
+    limit: number,
+    ttl: number,
+    now: number,
+  ): boolean {
     const bucket = this.buckets.get(key);
     if (!bucket || bucket.resetAt <= now) {
       this.buckets.set(key, { count: 1, resetAt: now + ttl });
@@ -44,10 +73,7 @@ export class RateLimitGuard implements CanActivate {
     }
 
     if (bucket.count >= limit) {
-      throw new HttpException(
-        'Too Many Requests',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+      return false;
     }
 
     bucket.count += 1;

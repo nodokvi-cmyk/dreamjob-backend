@@ -16,6 +16,8 @@ const REQUIRED_KEYS = [
   'STRIPE_API_KEY',
   'STRIPE_WEBHOOK_SECRET',
   'LLM_API_KEY',
+  'UPSTASH_KV_REST_API_URL',
+  'UPSTASH_KV_REST_API_TOKEN',
 ] as const;
 
 function isFilled(value: unknown): value is string {

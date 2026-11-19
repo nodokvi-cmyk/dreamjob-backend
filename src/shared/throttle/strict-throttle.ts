@@ -1,1 +1,4 @@
-export const strictThrottle = { default: { limit: 5, ttl: 60_000 } };
+export const strictThrottle = {
+  default: { limit: 5, ttl: 60_000 },
+  shared: true,
+};

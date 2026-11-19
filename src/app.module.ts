@@ -17,6 +17,7 @@ import { NotificationsModule } from './notifications/notifications.module.js';
 import { PaymentModule } from './payment/payment.module.js';
 import { PublicationsModule } from './publications/publications.module.js';
 import { RateLimitGuard } from './shared/throttle/rate-limit.guard.js';
+import { SharedRateCounter } from './shared/throttle/shared-rate-counter.js';
 import { UsersModule } from './users/users.module.js';
 import { VacanciesModule } from './vacancies/vacancies.module.js';
 
@@ -51,6 +52,10 @@ import { VacanciesModule } from './vacancies/vacancies.module.js';
     ChatModule,
   ],
   controllers: [AppController],
-  providers: [AppService, { provide: APP_GUARD, useClass: RateLimitGuard }],
+  providers: [
+    AppService,
+    SharedRateCounter,
+    { provide: APP_GUARD, useClass: RateLimitGuard },
+  ],
 })
 export class AppModule {}
