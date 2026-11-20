@@ -702,7 +702,7 @@ export class VacanciesService {
     }
     await this.applications.removeForVacancies([vacancy._id]);
     await this.bookmarks.removeForVacancies([vacancy._id]);
-    await this.invitations.removeForVacancies([vacancy._id]);
+    await this.invitations.releaseForVacancy(vacancy._id);
     await this.deleteFiles(vacancy.photoKeys);
 
     return this.toResponse(vacancy, true);
@@ -723,7 +723,7 @@ export class VacanciesService {
     const vacancyIds = vacancies.map(({ _id }) => _id);
     await this.applications.removeForVacancies(vacancyIds);
     await this.bookmarks.removeForVacancies(vacancyIds);
-    await this.invitations.removeForVacancies(vacancyIds);
+    await this.invitations.removeForCompany(companyId);
     await this.deleteFiles(vacancies.flatMap(({ photoKeys }) => photoKeys));
   }
 

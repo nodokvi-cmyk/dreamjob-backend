@@ -173,7 +173,7 @@ export class InvitationsService {
       );
     }
 
-    const { invitation, reinvited } = await this.createOrReinvite({
+    const { invitation, previous } = await this.createOrReinvite({
       publication: publication._id,
       user: publication.user,
       company: new Types.ObjectId(companyId),
@@ -182,10 +182,10 @@ export class InvitationsService {
       publicationTitle: publication.title,
     });
 
-    await this.removeIfOrphaned(invitation, companyId);
+    await this.removeIfOrphaned(invitation, companyId, previous);
 
     if (!(await this.spendInvite(companyId))) {
-      await this.undoSend(invitation._id, reinvited);
+      await this.undoSend(invitation._id, previous);
       const { limit } = await this.quota(companyId);
       throw new BadRequestException(
         `Monthly invitation limit reached (${limit}). It resets at the start of next month (UTC).`,
@@ -533,7 +533,8 @@ export class InvitationsService {
           vacancyId: invitation.vacancy.toString(),
           grantsAccess: granting.has(invitation._id.toString()),
           canInvite:
-            invitation.status === InvitationStatus.CANCELLED &&
+            (invitation.status === InvitationStatus.CANCELLED ||
+              invitation.status === InvitationStatus.DECLINED) &&
             (invitation.sends ?? 1) < MAX_INVITATION_SENDS,
         },
       ]),
@@ -586,12 +587,21 @@ export class InvitationsService {
     });
   }
 
-  async removeForVacancies(
-    vacancyIds: readonly (string | Types.ObjectId)[],
-  ): Promise<void> {
-    if (vacancyIds.length === 0) return;
+  async releaseForVacancy(vacancyId: string | Types.ObjectId): Promise<void> {
+    await this.invitationModel.updateMany(
+      { vacancy: vacancyId, status: InvitationStatus.INVITED },
+      { $set: { status: InvitationStatus.CANCELLED } },
+    );
+    await this.invitationModel.deleteMany({
+      vacancy: vacancyId,
+      status: InvitationStatus.ACCEPTED,
+    });
+  }
 
-    await this.invitationModel.deleteMany({ vacancy: { $in: vacancyIds } });
+  async removeForCompany(companyId: string): Promise<void> {
+    await this.invitationModel.deleteMany({
+      company: new Types.ObjectId(companyId),
+    });
   }
 
   private canCompanySee(
@@ -607,65 +617,115 @@ export class InvitationsService {
 
   private async createOrReinvite(
     fields: NewInvitation,
-  ): Promise<{ invitation: InvitationRecord; reinvited: boolean }> {
+  ): Promise<{ invitation: InvitationRecord; previous?: InvitationRecord }> {
     try {
       const created = await this.invitationModel.create(fields);
 
-      return { invitation: created.toObject(), reinvited: false };
+      return { invitation: created.toObject() };
     } catch (error: unknown) {
       if (!isDuplicateKeyError(error)) throw error;
     }
 
     const pair = { publication: fields.publication, company: fields.company };
-    const reinvited = await this.invitationModel
+    const changes = {
+      status: InvitationStatus.INVITED,
+      sends: MAX_INVITATION_SENDS,
+      user: fields.user,
+      vacancy: fields.vacancy,
+      publicationTitle: fields.publicationTitle,
+      ...(fields.message ? { message: fields.message } : {}),
+    };
+    const previous = await this.invitationModel
       .findOneAndUpdate(
         {
           ...pair,
-          status: InvitationStatus.CANCELLED,
           sends: { $not: { $gte: MAX_INVITATION_SENDS } },
+          $or: [
+            { status: InvitationStatus.CANCELLED },
+            {
+              status: InvitationStatus.DECLINED,
+              vacancy: { $ne: fields.vacancy },
+            },
+          ],
         },
         {
-          $set: {
-            status: InvitationStatus.INVITED,
-            sends: MAX_INVITATION_SENDS,
-            user: fields.user,
-            vacancy: fields.vacancy,
-            publicationTitle: fields.publicationTitle,
-            ...(fields.message ? { message: fields.message } : {}),
+          $set: changes,
+          $unset: {
+            respondedAt: '',
+            ...(fields.message ? {} : { message: '' }),
           },
-          ...(fields.message ? {} : { $unset: { message: '' } }),
         },
-        { new: true },
+        { returnDocument: 'before' },
       )
       .lean<InvitationRecord>();
-    if (reinvited) return { invitation: reinvited, reinvited: true };
+    if (previous) {
+      const {
+        respondedAt: _respondedAt,
+        message: _message,
+        ...kept
+      } = previous;
+      return { invitation: { ...kept, ...changes }, previous };
+    }
 
     const existing = await this.invitationModel
       .findOne(pair)
-      .select('status')
-      .lean<Pick<InvitationRecord, 'status'>>();
-    throw new ConflictException(
-      existing?.status === InvitationStatus.CANCELLED
-        ? `A publication can be invited at most ${MAX_INVITATION_SENDS} times`
-        : 'You already invited this publication',
-    );
+      .select('status sends vacancy')
+      .lean<Pick<InvitationRecord, 'status' | 'sends' | 'vacancy'>>();
+    throw new ConflictException(this.inviteConflictMessage(existing, fields));
   }
 
-  private async undoSend(id: Types.ObjectId, reinvited: boolean) {
-    if (!reinvited) {
+  private inviteConflictMessage(
+    existing: Pick<InvitationRecord, 'status' | 'sends' | 'vacancy'> | null,
+    fields: NewInvitation,
+  ): string {
+    const ended =
+      existing?.status === InvitationStatus.CANCELLED ||
+      existing?.status === InvitationStatus.DECLINED;
+    if (ended && (existing.sends ?? 1) >= MAX_INVITATION_SENDS) {
+      return `A publication can be invited at most ${MAX_INVITATION_SENDS} times`;
+    }
+    if (
+      existing?.status === InvitationStatus.DECLINED &&
+      existing.vacancy.equals(fields.vacancy)
+    ) {
+      return 'This invitation was declined, choose a different vacancy';
+    }
+    return 'You already invited this publication';
+  }
+
+  private async undoSend(id: Types.ObjectId, previous?: InvitationRecord) {
+    if (!previous) {
       await this.invitationModel.deleteOne({ _id: id });
       return;
     }
 
+    const unset: Record<string, ''> = {};
+    if (!previous.message) unset.message = '';
+    if (!previous.respondedAt) unset.respondedAt = '';
+
     await this.invitationModel.updateOne(
       { _id: id, status: InvitationStatus.INVITED },
-      { $set: { status: InvitationStatus.CANCELLED, sends: 1 } },
+      {
+        $set: {
+          status: previous.status,
+          sends: previous.sends ?? 1,
+          user: previous.user,
+          vacancy: previous.vacancy,
+          publicationTitle: previous.publicationTitle,
+          ...(previous.message ? { message: previous.message } : {}),
+          ...(previous.respondedAt
+            ? { respondedAt: previous.respondedAt }
+            : {}),
+        },
+        ...(Object.keys(unset).length > 0 ? { $unset: unset } : {}),
+      },
     );
   }
 
   private async removeIfOrphaned(
     invitation: InvitationRecord,
     companyId: string,
+    previous?: InvitationRecord,
   ): Promise<void> {
     const [publicationExists, vacancyExists, companyExists] = await Promise.all(
       [
@@ -676,7 +736,11 @@ export class InvitationsService {
     );
     if (publicationExists && vacancyExists && companyExists) return;
 
-    await this.invitationModel.deleteOne({ _id: invitation._id });
+    if (publicationExists && companyExists) {
+      await this.undoSend(invitation._id, previous);
+    } else {
+      await this.invitationModel.deleteOne({ _id: invitation._id });
+    }
 
     if (!publicationExists) {
       throw new NotFoundException('Publication not found');
