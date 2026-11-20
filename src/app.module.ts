@@ -9,6 +9,7 @@ import { ApplicationsModule } from './applications/applications.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { BookmarksModule } from './bookmarks/bookmarks.module.js';
 import { ChatModule } from './chat/chat.module.js';
+import { CronModule } from './cron/cron.module.js';
 import { EmailChangeModule } from './email-change/email-change.module.js';
 import { CompaniesModule } from './companies/companies.module.js';
 import { validateEnv } from './config/env.validation.js';
@@ -52,6 +53,7 @@ import { VacanciesModule } from './vacancies/vacancies.module.js';
     PublicationsModule,
     InvitationsModule,
     ChatModule,
+    CronModule,
   ],
   controllers: [AppController],
   providers: [
