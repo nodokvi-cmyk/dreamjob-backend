@@ -10,6 +10,7 @@ export interface ThrottleLimit {
 export interface ThrottleOptions {
   default: ThrottleLimit;
   shared?: boolean;
+  trustVisitorIp?: boolean;
 }
 
 export const Throttle = (options: ThrottleOptions) =>

@@ -43,6 +43,8 @@ Visible occurrences found in the frontend `src/` on 2026-11-04 (change each to G
 | `POST google` | `idToken` | `{ token }` |
 | `GET /auth/me` | none | the account, plus `passwordSetupRequired`; companies also `isProfileComplete` |
 
+- **Visitor IP on the two Google calls (`POST /auth/users/google`, `POST /auth/companies/google`):** these are made by the Next server, so the backend sees only the frontend's IP and all visitors would share one 20/min limit. On these two calls only, the Next server must send two extra headers: `X-Visitor-IP` (the visitor's IP, taken from the incoming request's `x-forwarded-for` first value) and `X-Frontend-Secret` (the value of the server-only env `FRONTEND_SHARED_SECRET`, never `NEXT_PUBLIC_`, never sent to the browser). The backend counts the limit per `X-Visitor-IP` only when the secret matches and the IP is valid; otherwise it uses the caller's IP, so a missing header still works but shares one limit. Every other call needs no change.
+
 - Sign-up returns 409 with `code: 'EMAIL_NOT_VERIFIED'` when the email waits for verification: go to the verify page, call `resend-code` on arrival if no code was just sent.
 - After verify-email, keep the person on a set-password step while `passwordSetupRequired` is true: `PATCH /users/:id/password` or `/companies/:id/password` with `newPassword`, `confirmNewPassword` (no `currentPassword` for a first password).
 - Password: 8 to 64 chars, upper, lower, digit, symbol, printable ASCII only. Always two fields. Sign-in does not reveal the rules.

@@ -5,7 +5,10 @@ import {
   HttpStatus,
   Injectable,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
+import { createHash, timingSafeEqual } from 'node:crypto';
+import { isIP } from 'node:net';
 import { SharedRateCounter } from './shared-rate-counter.js';
 import { THROTTLE_KEY } from './throttle.decorator.js';
 import type { ThrottleLimit, ThrottleOptions } from './throttle.decorator.js';
@@ -18,6 +21,23 @@ interface Bucket {
 const DEFAULT_LIMIT: ThrottleLimit = { limit: 30, ttl: 60_000 };
 const SWEEP_THRESHOLD = 10_000;
 
+interface ThrottledRequest {
+  ip?: string;
+  headers: Record<string, string | string[] | undefined>;
+}
+
+function digest(value: string): Buffer {
+  return createHash('sha256').update(value).digest();
+}
+
+function headerValue(
+  headers: ThrottledRequest['headers'],
+  name: string,
+): string | undefined {
+  const value = headers[name];
+  return typeof value === 'string' ? value : undefined;
+}
+
 function tooManyRequests(): HttpException {
   return new HttpException('Too Many Requests', HttpStatus.TOO_MANY_REQUESTS);
 }
@@ -25,11 +45,17 @@ function tooManyRequests(): HttpException {
 @Injectable()
 export class RateLimitGuard implements CanActivate {
   private readonly buckets = new Map<string, Bucket>();
+  private readonly secretDigest: Buffer;
 
   constructor(
     private readonly reflector: Reflector,
     private readonly sharedCounter: SharedRateCounter,
-  ) {}
+    config: ConfigService,
+  ) {
+    this.secretDigest = digest(
+      config.getOrThrow<string>('FRONTEND_SHARED_SECRET'),
+    );
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const options = this.reflector.getAllAndOverride<
@@ -37,9 +63,12 @@ export class RateLimitGuard implements CanActivate {
     >(THROTTLE_KEY, [context.getHandler(), context.getClass()]);
     const { limit, ttl } = options?.default ?? DEFAULT_LIMIT;
 
-    const request = context.switchToHttp().getRequest<{ ip?: string }>();
+    const request = context.switchToHttp().getRequest<ThrottledRequest>();
     const now = Date.now();
-    const key = `${request.ip ?? 'unknown'}:${context.getClass().name}:${context.getHandler().name}`;
+    const ip = options?.trustVisitorIp
+      ? this.visitorIp(request)
+      : (request.ip ?? 'unknown');
+    const key = `${ip}:${context.getClass().name}:${context.getHandler().name}`;
 
     if (this.buckets.size > SWEEP_THRESHOLD) {
       this.sweep(now);
@@ -58,6 +87,18 @@ export class RateLimitGuard implements CanActivate {
       throw tooManyRequests();
     }
     return true;
+  }
+
+  private visitorIp(request: ThrottledRequest): string {
+    const fallback = request.ip ?? 'unknown';
+    const secret = headerValue(request.headers, 'x-frontend-secret');
+    const visitor = headerValue(request.headers, 'x-visitor-ip')?.trim();
+    if (!secret || !visitor || isIP(visitor) === 0) {
+      return fallback;
+    }
+    return timingSafeEqual(digest(secret), this.secretDigest)
+      ? visitor
+      : fallback;
   }
 
   private takeLocal(

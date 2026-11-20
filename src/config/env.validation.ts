@@ -18,6 +18,7 @@ const REQUIRED_KEYS = [
   'LLM_API_KEY',
   'UPSTASH_KV_REST_API_URL',
   'UPSTASH_KV_REST_API_TOKEN',
+  'FRONTEND_SHARED_SECRET',
 ] as const;
 
 function isFilled(value: unknown): value is string {
