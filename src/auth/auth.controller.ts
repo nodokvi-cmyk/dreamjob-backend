@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { CreateCompanyDto } from '../companies/dto/create-company.dto.js';
 import { IsAuthGuard } from '../guards/is-auth.guard.js';
+import { AllowPasswordSetup } from '../shared/decorators/allow-password-setup.decorator.js';
 import { AccountId } from '../shared/decorators/account-id.decorator.js';
 import { AccountRole } from '../shared/decorators/account-role.decorator.js';
 import { moderateThrottle } from '../shared/throttle/moderate-throttle.js';
@@ -124,6 +125,7 @@ export class AuthController {
   }
 
   @Get('me')
+  @AllowPasswordSetup()
   @UseGuards(IsAuthGuard)
   getCurrentAccount(
     @AccountId() accountId: string,

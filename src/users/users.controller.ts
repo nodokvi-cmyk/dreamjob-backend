@@ -14,6 +14,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { uploadFilePipe, uploadLimits } from '../aws-s3/upload-file.js';
 import { IsAuthGuard } from '../guards/is-auth.guard.js';
+import { AllowPasswordSetup } from '../shared/decorators/allow-password-setup.decorator.js';
 import { RolesGuard } from '../guards/roles.guard.js';
 import { AccountId } from '../shared/decorators/account-id.decorator.js';
 import { AccountRole } from '../shared/decorators/account-role.decorator.js';
@@ -184,6 +185,7 @@ export class UsersController {
   }
 
   @Patch(':id/password')
+  @AllowPasswordSetup()
   @UseGuards(IsAuthGuard, RolesGuard)
   @Throttle(strictThrottle)
   async changePassword(

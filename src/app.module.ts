@@ -14,6 +14,7 @@ import { CompaniesModule } from './companies/companies.module.js';
 import { validateEnv } from './config/env.validation.js';
 import { InvitationsModule } from './invitations/invitations.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
+import { PasswordSetupModule } from './password-setup/password-setup.module.js';
 import { PaymentModule } from './payment/payment.module.js';
 import { PublicationsModule } from './publications/publications.module.js';
 import { RateLimitGuard } from './shared/throttle/rate-limit.guard.js';
@@ -38,6 +39,7 @@ import { VacanciesModule } from './vacancies/vacancies.module.js';
         signOptions: { expiresIn: '1h' },
       }),
     }),
+    PasswordSetupModule,
     UsersModule,
     CompaniesModule,
     VacanciesModule,
