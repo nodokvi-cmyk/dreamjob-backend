@@ -71,12 +71,16 @@ export class VacancyBillingService {
       );
     }
 
+    const settled = await this.settlePaidCheckout(vacancy);
+    if (settled?.submittedAt) return { kind: 'done', vacancy: settled };
+    const current = settled ?? vacancy;
+
     const source = await this.spendCredit(companyId);
     if (!source) {
       return {
         kind: 'checkout',
         checkoutUrl: await this.checkoutUrl(
-          vacancy,
+          current,
           companyId,
           VacancyPaymentPurpose.SUBMIT,
         ),
@@ -86,7 +90,7 @@ export class VacancyBillingService {
     const submitted = await this.vacancyModel
       .findOneAndUpdate(
         {
-          _id: vacancy._id,
+          _id: current._id,
           company: companyId,
           status: VacancyStatus.PENDING,
           submittedAt: { $exists: false },
@@ -103,7 +107,7 @@ export class VacancyBillingService {
       throw new ConflictException('Vacancy changed, try again');
     }
 
-    await this.expireCheckoutQuietly(vacancy.checkoutSessionId);
+    await this.expireCheckoutQuietly(current.checkoutSessionId);
     return { kind: 'done', vacancy: submitted };
   }
 
@@ -112,30 +116,40 @@ export class VacancyBillingService {
     companyId: string,
     deadline: Date,
   ): Promise<VacancyBillingResult> {
-    if (vacancy.status === VacancyStatus.CLOSED) {
+    const settled = await this.settlePaidCheckout(vacancy);
+    if (
+      settled &&
+      settled.deadline.getTime() > vacancy.deadline.getTime() &&
+      settled.deadline.getTime() >= deadline.getTime()
+    ) {
+      return { kind: 'done', vacancy: settled };
+    }
+    const current = settled ?? vacancy;
+
+    if (current.status === VacancyStatus.CLOSED) {
       throw new BadRequestException('Closed vacancies cannot be extended');
     }
-    if (!vacancy.firstPublishedAt || !vacancy.freeWindowEndsAt) {
+    if (!current.firstPublishedAt || !current.freeWindowEndsAt) {
       throw new BadRequestException(
         'Only vacancies that were published can be extended',
       );
     }
 
     const now = Date.now();
-    if (deadline.getTime() <= Math.max(vacancy.deadline.getTime(), now)) {
+    if (deadline.getTime() <= Math.max(current.deadline.getTime(), now)) {
       throw new BadRequestException(
         'The new deadline must be later than the current one',
       );
     }
 
     const currentEnd = this.effectiveWindowEnd(
-      vacancy.freeWindowEndsAt,
-      vacancy.windowPausedAt,
+      current.freeWindowEndsAt,
+      current.windowPausedAt,
       now,
     );
     if (deadline.getTime() <= currentEnd.getTime()) {
-      const extended = await this.saveExtension(vacancy, { deadline });
-      await this.expireCheckoutQuietly(vacancy.checkoutSessionId);
+      const extended = await this.saveExtension(current, { deadline });
+      await this.expireCheckoutQuietly(current.checkoutSessionId);
       return { kind: 'done', vacancy: extended };
     }
 
@@ -151,7 +165,7 @@ export class VacancyBillingService {
       return {
         kind: 'checkout',
         checkoutUrl: await this.checkoutUrl(
-          vacancy,
+          current,
           companyId,
           VacancyPaymentPurpose.EXTEND,
           deadline,
@@ -160,11 +174,11 @@ export class VacancyBillingService {
     }
 
     try {
-      const extended = await this.saveExtension(vacancy, {
+      const extended = await this.saveExtension(current, {
         deadline,
         freeWindowEndsAt: windowEnd,
       });
-      await this.expireCheckoutQuietly(vacancy.checkoutSessionId);
+      await this.expireCheckoutQuietly(current.checkoutSessionId);
       return { kind: 'done', vacancy: extended };
     } catch (error: unknown) {
       await this.giveBack(companyId, source);
@@ -498,6 +512,40 @@ export class VacancyBillingService {
     }
 
     return session.url;
+  }
+
+  private async settlePaidCheckout(
+    vacancy: VacancyRecord,
+  ): Promise<VacancyRecord | undefined> {
+    if (!vacancy.checkoutSessionId) return undefined;
+
+    let session: Stripe.Checkout.Session;
+    try {
+      session = await this.stripe.checkout.sessions.retrieve(
+        vacancy.checkoutSessionId,
+      );
+    } catch (error: unknown) {
+      this.logger.warn(
+        error instanceof Error ? error.message : 'Session lookup failed',
+      );
+      return undefined;
+    }
+    if (
+      session.status !== 'complete' ||
+      session.payment_status !== 'paid' ||
+      session.metadata?.app !== STRIPE_APP_TAG
+    ) {
+      return undefined;
+    }
+
+    await this.fulfill(session);
+
+    const fresh = await this.vacancyModel
+      .findById(vacancy._id)
+      .lean<VacancyRecord>();
+    if (!fresh) throw new NotFoundException('Vacancy not found');
+
+    return fresh;
   }
 
   private async reusableSessionUrl(
