@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto';
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -13,6 +15,17 @@ import { cloudFrontBaseUrl } from './cloudfront-url.js';
 import { StoragePrefix } from './storage-prefix.js';
 
 const PRESIGNED_URL_TTL_SECONDS = 300;
+const DELETE_BATCH_SIZE = 1000;
+
+export interface StoredObject {
+  key: string;
+  lastModified: Date;
+}
+
+export interface DeleteManyResult {
+  deleted: number;
+  failed: number;
+}
 
 @Injectable()
 export class AwsS3Service {
@@ -76,6 +89,68 @@ export class AwsS3Service {
         error instanceof Error ? error.stack : undefined,
       );
     }
+  }
+
+  async listObjects(prefix: StoragePrefix): Promise<StoredObject[]> {
+    const objects: StoredObject[] = [];
+    let continuationToken: string | undefined;
+
+    do {
+      const page = await this.client.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: `${prefix}/`,
+          ContinuationToken: continuationToken,
+        }),
+      );
+
+      for (const object of page.Contents ?? []) {
+        if (object.Key && object.LastModified) {
+          objects.push({ key: object.Key, lastModified: object.LastModified });
+        }
+      }
+
+      continuationToken = page.IsTruncated
+        ? page.NextContinuationToken
+        : undefined;
+    } while (continuationToken);
+
+    return objects;
+  }
+
+  async deleteMany(keys: string[]): Promise<DeleteManyResult> {
+    let failed = 0;
+
+    for (let start = 0; start < keys.length; start += DELETE_BATCH_SIZE) {
+      const batch = keys.slice(start, start + DELETE_BATCH_SIZE);
+
+      try {
+        const response = await this.client.send(
+          new DeleteObjectsCommand({
+            Bucket: this.bucket,
+            Delete: {
+              Objects: batch.map((key) => ({ Key: key })),
+              Quiet: true,
+            },
+          }),
+        );
+        const errors = response.Errors ?? [];
+        failed += errors.length;
+        for (const error of errors) {
+          this.logger.error(
+            `Failed to delete S3 object ${error.Key ?? 'unknown'}: ${error.Code ?? 'unknown error'}`,
+          );
+        }
+      } catch (error: unknown) {
+        failed += batch.length;
+        this.logger.error(
+          `Failed to delete a batch of ${batch.length} S3 objects`,
+          error instanceof Error ? error.stack : undefined,
+        );
+      }
+    }
+
+    return { deleted: keys.length - failed, failed };
   }
 
   publicUrl(key: string): string {

@@ -3,6 +3,10 @@
     "cleanup": {
       "schedule": "0 3 * * *",
       "path": "/cron/cleanup"
+    },
+    "s3-sweep": {
+      "schedule": "30 3 * * *",
+      "path": "/cron/s3-sweep"
     }
   }
 }
