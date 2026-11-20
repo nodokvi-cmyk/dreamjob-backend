@@ -1,4 +1,10 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { CronSecretGuard } from './cron-secret.guard.js';
 import { CronService } from './cron.service.js';
 import type { CleanupResult } from './cron.service.js';
@@ -7,7 +13,8 @@ import type { CleanupResult } from './cron.service.js';
 export class CronController {
   constructor(private readonly cronService: CronService) {}
 
-  @Get('cleanup')
+  @Post('cleanup')
+  @HttpCode(HttpStatus.OK)
   @UseGuards(CronSecretGuard)
   cleanup(): Promise<CleanupResult> {
     return this.cronService.cleanup();

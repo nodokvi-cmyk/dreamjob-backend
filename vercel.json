@@ -2,8 +2,7 @@
   "schedules": {
     "cleanup": {
       "schedule": "0 3 * * *",
-      "path": "/cron/cleanup",
-      "requestMethod": "GET"
+      "path": "/cron/cleanup"
     }
   }
 }
