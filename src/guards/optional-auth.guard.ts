@@ -10,9 +10,12 @@ import type { OptionalAuthRequest } from '../shared/types/optional-auth-request.
 import { isJwtPayload } from '../shared/types/jwt-payload.js';
 import { getBearerToken } from './bearer-token.js';
 
+const WARN_INTERVAL_MS = 60_000;
+
 @Injectable()
 export class OptionalAuthGuard implements CanActivate {
   private readonly logger = new Logger(OptionalAuthGuard.name);
+  private lastWarnAt = 0;
 
   constructor(
     private readonly jwtService: JwtService,
@@ -40,14 +43,21 @@ export class OptionalAuthGuard implements CanActivate {
         payload.accountRole,
       );
     } catch (error: unknown) {
-      this.logger.warn(
-        `Password-lock check failed, treated as anonymous: ${error instanceof Error ? error.name : 'unknown error'}`,
-      );
+      this.warnLockCheckFailed(error);
     }
     if (blocked) return true;
 
     request.accountId = payload.accountId;
     request.accountRole = payload.accountRole;
     return true;
+  }
+
+  private warnLockCheckFailed(error: unknown): void {
+    const now = Date.now();
+    if (now - this.lastWarnAt < WARN_INTERVAL_MS) return;
+    this.lastWarnAt = now;
+    this.logger.warn(
+      `Password-lock check failed, treated as anonymous: ${error instanceof Error ? error.name : 'unknown error'}`,
+    );
   }
 }
