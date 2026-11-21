@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -377,10 +378,15 @@ export class CompaniesService implements EmailChangeStore {
       newPassword,
     );
     const { matchedCount } = await this.companyModel.updateOne(
-      { _id: id },
+      { _id: id, password: company.password ?? { $exists: false } },
       { $set: { password } },
     );
-    if (matchedCount === 0) throw new NotFoundException('Company not found');
+    if (matchedCount === 0) {
+      if (!(await this.companyModel.exists({ _id: id }))) {
+        throw new NotFoundException('Company not found');
+      }
+      throw new ConflictException('Password changed, try again');
+    }
   }
 
   async chooseFreePlan(id: string): Promise<CompanyDocument> {

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -464,10 +465,15 @@ export class UsersService implements EmailChangeStore {
       newPassword,
     );
     const { matchedCount } = await this.userModel.updateOne(
-      { _id: id },
+      { _id: id, password: user.password ?? { $exists: false } },
       { $set: { password } },
     );
-    if (matchedCount === 0) throw new NotFoundException('User not found');
+    if (matchedCount === 0) {
+      if (!(await this.userModel.exists({ _id: id }))) {
+        throw new NotFoundException('User not found');
+      }
+      throw new ConflictException('Password changed, try again');
+    }
   }
 
   async remove(id: string): Promise<UserDocument> {
