@@ -14,6 +14,7 @@ const MAX_IMAGE_SIDE: Record<ImageKind, number> = {
   [ImageKind.LOGO]: 512,
   [ImageKind.VACANCY]: 1280,
 };
+const MAX_INPUT_PIXELS = 20_000_000;
 const WEBP_QUALITY = 80;
 const ALLOWED_FORMATS: ReadonlySet<string> = new Set(['jpeg', 'png', 'webp']);
 
@@ -22,7 +23,9 @@ export async function processImage(
   kind: ImageKind,
 ): Promise<Buffer> {
   try {
-    const { format, width, height } = await sharp(input).metadata();
+    const { format, width, height } = await sharp(input, {
+      limitInputPixels: MAX_INPUT_PIXELS,
+    }).metadata();
     if (!format || !ALLOWED_FORMATS.has(format)) {
       throw new BadRequestException(
         'Only JPEG, PNG and WebP images are allowed',
@@ -33,7 +36,9 @@ export async function processImage(
 
     const maxSide = MAX_IMAGE_SIDE[kind];
     const side = Math.min(maxSide, width, height);
-    const pipeline = sharp(input).rotate();
+    const pipeline = sharp(input, {
+      limitInputPixels: MAX_INPUT_PIXELS,
+    }).rotate();
     const resized =
       kind === ImageKind.AVATAR
         ? pipeline.resize(side, side, { fit: 'cover' })
