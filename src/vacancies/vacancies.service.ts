@@ -428,7 +428,7 @@ export class VacanciesService {
     const isContentChange =
       Object.keys(changes).length > 0 || Object.keys(unsets).length > 0;
     const isDeadlineChange =
-      deadline !== undefined &&
+      deadline instanceof Date &&
       deadline.getTime() !== vacancy.deadline.getTime();
     if (deadline && isDeadlineChange) {
       if (
