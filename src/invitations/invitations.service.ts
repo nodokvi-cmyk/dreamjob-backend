@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
   Injectable,
   Logger,
   NotFoundException,
@@ -182,9 +183,18 @@ export class InvitationsService {
       publicationTitle: publication.title,
     });
 
-    await this.removeIfOrphaned(invitation, companyId, previous);
+    let spent: boolean;
+    try {
+      await this.removeIfOrphaned(invitation, companyId, previous);
+      spent = await this.spendInvite(companyId);
+    } catch (error: unknown) {
+      if (!(error instanceof HttpException)) {
+        await this.undoSendQuietly(invitation, previous);
+      }
+      throw error;
+    }
 
-    if (!(await this.spendInvite(companyId))) {
+    if (!spent) {
       await this.undoSend(invitation, previous);
       const { limit } = await this.quota(companyId);
       throw new BadRequestException(
@@ -747,6 +757,19 @@ export class InvitationsService {
       return 'This invitation was declined, choose a different vacancy';
     }
     return 'You already invited this publication';
+  }
+
+  private async undoSendQuietly(
+    invitation: InvitationRecord,
+    previous?: InvitationRecord,
+  ): Promise<void> {
+    try {
+      await this.undoSend(invitation, previous);
+    } catch (error: unknown) {
+      this.logger.error(
+        `Failed to undo an invitation after an error (${error instanceof Error ? error.name : 'unknown error'})`,
+      );
+    }
   }
 
   private async undoSend(
