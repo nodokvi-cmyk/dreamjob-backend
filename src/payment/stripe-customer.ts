@@ -1,3 +1,4 @@
+import { Logger, NotFoundException } from '@nestjs/common';
 import type { Model } from 'mongoose';
 import type Stripe from 'stripe';
 import type {
@@ -5,6 +6,21 @@ import type {
   CompanyDocument,
 } from '../companies/schema/company.schema.js';
 import { STRIPE_APP_TAG } from './plan-settings.js';
+
+const logger = new Logger('StripeCustomer');
+
+async function deleteCustomerQuietly(
+  stripe: Stripe,
+  customerId: string,
+): Promise<void> {
+  try {
+    await stripe.customers.del(customerId);
+  } catch (error: unknown) {
+    logger.warn(
+      error instanceof Error ? error.message : 'Could not delete customer',
+    );
+  }
+}
 
 export async function ensureStripeCustomer(
   stripe: Stripe,
@@ -28,8 +44,13 @@ export async function ensureStripeCustomer(
     .select('+stripeCustomerId');
   if (saved?.stripeCustomerId) return saved.stripeCustomerId;
 
+  await deleteCustomerQuietly(stripe, customer.id);
+
   const current = await companyModel
     .findById(company._id)
     .select('+stripeCustomerId');
-  return current?.stripeCustomerId ?? customer.id;
+  if (!current?.stripeCustomerId) {
+    throw new NotFoundException('Company not found');
+  }
+  return current.stripeCustomerId;
 }
