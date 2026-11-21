@@ -463,16 +463,20 @@ export class UsersService implements EmailChangeStore {
     const user = await this.userModel.findByIdAndDelete(id);
     if (!user) throw new NotFoundException('User not found');
 
-    await this.emailClaims.releaseAll(id);
-    await this.applications.detachUser(id);
-    await this.bookmarks.removeForUser(id);
-    await this.publications.removeForUser(id);
-    await this.notifications.removeForRecipient(id, AuthRole.USER);
+    await this.finishRemoval(id);
     await Promise.all([
       this.s3.deleteQuietly(user.avatarKey),
       this.s3.deleteQuietly(user.cvKey),
     ]);
 
     return user;
+  }
+
+  async finishRemoval(id: string): Promise<void> {
+    await this.emailClaims.releaseAll(id);
+    await this.applications.detachUser(id);
+    await this.bookmarks.removeForUser(id);
+    await this.publications.removeForUser(id);
+    await this.notifications.removeForRecipient(id, AuthRole.USER);
   }
 }

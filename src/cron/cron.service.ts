@@ -1,16 +1,33 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { Application } from '../applications/schema/application.schema.js';
+import { Bookmark } from '../bookmarks/schema/bookmark.schema.js';
+import { CompaniesService } from '../companies/companies.service.js';
 import { Company } from '../companies/schema/company.schema.js';
 import { EmailClaim } from '../email-claims/schema/email-claim.schema.js';
+import { Invitation } from '../invitations/schema/invitation.schema.js';
+import { Notification } from '../notifications/schema/notification.schema.js';
+import { Publication } from '../publications/schema/publication.schema.js';
+import { AuthRole } from '../shared/types/auth-role.js';
 import { User } from '../users/schema/user.schema.js';
+import { UsersService } from '../users/users.service.js';
+import { Vacancy } from '../vacancies/schema/vacancy.schema.js';
 
 const UNVERIFIED_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const REPAIR_LIMIT = 100;
+
+export interface RepairResult {
+  users: number;
+  companies: number;
+  failed: number;
+}
 
 export interface CleanupResult {
   users: number;
   companies: number;
   claims: number;
+  repaired: RepairResult;
 }
 
 @Injectable()
@@ -22,6 +39,19 @@ export class CronService {
     @InjectModel(Company.name) private readonly companyModel: Model<Company>,
     @InjectModel(EmailClaim.name)
     private readonly claimModel: Model<EmailClaim>,
+    @InjectModel(Publication.name)
+    private readonly publicationModel: Model<Publication>,
+    @InjectModel(Bookmark.name)
+    private readonly bookmarkModel: Model<Bookmark>,
+    @InjectModel(Application.name)
+    private readonly applicationModel: Model<Application>,
+    @InjectModel(Notification.name)
+    private readonly notificationModel: Model<Notification>,
+    @InjectModel(Vacancy.name) private readonly vacancyModel: Model<Vacancy>,
+    @InjectModel(Invitation.name)
+    private readonly invitationModel: Model<Invitation>,
+    private readonly usersService: UsersService,
+    private readonly companiesService: CompaniesService,
   ) {}
 
   async cleanup(): Promise<CleanupResult> {
@@ -35,14 +65,16 @@ export class CronService {
       this.companyModel.deleteMany(unverified),
     ]);
     const claims = await this.deleteOrphanClaims();
+    const repaired = await this.repairOrphans();
 
     const result: CleanupResult = {
       users: users.deletedCount,
       companies: companies.deletedCount,
       claims,
+      repaired,
     };
     this.logger.log(
-      `Cleanup: ${result.users} users, ${result.companies} companies, ${result.claims} claims deleted`,
+      `Cleanup: ${result.users} users, ${result.companies} companies, ${result.claims} claims deleted; repaired ${repaired.users} users, ${repaired.companies} companies, ${repaired.failed} failed`,
     );
     return result;
   }
@@ -79,5 +111,93 @@ export class CronService {
       expiresAt: { $exists: false },
     });
     return deletedCount;
+  }
+
+  private async repairOrphans(): Promise<RepairResult> {
+    const users = this.userModel.collection.collectionName;
+    const companies = this.companyModel.collection.collectionName;
+
+    const [userIds, companyIds] = await Promise.all([
+      this.collectMissing([
+        this.missingOwners(this.publicationModel, 'user', users),
+        this.missingOwners(this.bookmarkModel, 'user', users),
+        this.missingOwners(this.applicationModel, 'user', users),
+        this.missingOwners(this.notificationModel, 'recipient', users, {
+          recipientRole: AuthRole.USER,
+        }),
+      ]),
+      this.collectMissing([
+        this.missingOwners(this.vacancyModel, 'company', companies),
+        this.missingOwners(this.invitationModel, 'company', companies),
+        this.missingOwners(this.notificationModel, 'recipient', companies, {
+          recipientRole: AuthRole.COMPANY,
+        }),
+      ]),
+    ]);
+
+    const result: RepairResult = { users: 0, companies: 0, failed: 0 };
+
+    for (const id of userIds) {
+      if (await this.repairOne(() => this.usersService.finishRemoval(id))) {
+        result.users += 1;
+      } else {
+        result.failed += 1;
+      }
+    }
+    for (const id of companyIds) {
+      if (await this.repairOne(() => this.companiesService.finishRemoval(id))) {
+        result.companies += 1;
+      } else {
+        result.failed += 1;
+      }
+    }
+
+    return result;
+  }
+
+  private async collectMissing(
+    lookups: Promise<string[]>[],
+  ): Promise<string[]> {
+    const found = await Promise.all(lookups);
+    return [...new Set(found.flat())].slice(0, REPAIR_LIMIT);
+  }
+
+  private async missingOwners<T>(
+    model: Model<T>,
+    field: string,
+    ownerCollection: string,
+    match: Record<string, unknown> = {},
+  ): Promise<string[]> {
+    const rows = await model.aggregate<{ _id: Types.ObjectId }>([
+      { $match: { ...match, [field]: { $type: 'objectId' } } },
+      { $group: { _id: `$${field}` } },
+      {
+        $lookup: {
+          from: ownerCollection,
+          localField: '_id',
+          foreignField: '_id',
+          pipeline: [{ $project: { _id: 1 } }],
+          as: 'owner',
+        },
+      },
+      { $match: { owner: { $size: 0 } } },
+      { $limit: REPAIR_LIMIT },
+      { $project: { _id: 1 } },
+    ]);
+
+    return rows.map((row) => row._id.toString());
+  }
+
+  private async repairOne(run: () => Promise<void>): Promise<boolean> {
+    try {
+      await run();
+      return true;
+    } catch (error: unknown) {
+      this.logger.error(
+        'Orphan repair failed for one account',
+        error instanceof Error ? error.stack : String(error),
+      );
+      return false;
+    }
   }
 }

@@ -430,11 +430,15 @@ export class CompaniesService implements EmailChangeStore {
     const company = await this.companyModel.findByIdAndDelete(id);
     if (!company) throw new NotFoundException('Company not found');
 
-    await this.vacancies.removeAllByCompany(id);
-    await this.emailClaims.releaseAll(id);
-    await this.notifications.removeForRecipient(id, AuthRole.COMPANY);
+    await this.finishRemoval(id);
     await this.s3.deleteQuietly(company.logoKey);
 
     return company;
+  }
+
+  async finishRemoval(id: string): Promise<void> {
+    await this.vacancies.removeAllByCompany(id);
+    await this.emailClaims.releaseAll(id);
+    await this.notifications.removeForRecipient(id, AuthRole.COMPANY);
   }
 }
