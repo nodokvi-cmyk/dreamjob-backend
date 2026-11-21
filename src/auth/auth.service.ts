@@ -166,7 +166,9 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired verification code');
     }
 
-    await this.usersService.markEmailVerified(email);
+    if (!(await this.usersService.markEmailVerified(email))) {
+      throw new UnauthorizedException('Invalid or expired verification code');
+    }
 
     return { token: await this.signUserToken(user) };
   }
@@ -180,7 +182,9 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired verification code');
     }
 
-    await this.companiesService.markEmailVerified(email);
+    if (!(await this.companiesService.markEmailVerified(email))) {
+      throw new UnauthorizedException('Invalid or expired verification code');
+    }
 
     return { token: await this.signCompanyToken(company) };
   }
@@ -286,7 +290,9 @@ export class AuthService {
       await this.usersService.claimOtpAttempt(email),
       resetPasswordDto,
     );
-    await this.usersService.resetPassword(email, passwordHash);
+    if (!(await this.usersService.resetPassword(email, passwordHash))) {
+      throw new UnauthorizedException('Invalid or expired code');
+    }
 
     return { message: RESET_PASSWORD_MESSAGE };
   }
@@ -299,7 +305,9 @@ export class AuthService {
       await this.companiesService.claimOtpAttempt(email),
       resetPasswordDto,
     );
-    await this.companiesService.resetPassword(email, passwordHash);
+    if (!(await this.companiesService.resetPassword(email, passwordHash))) {
+      throw new UnauthorizedException('Invalid or expired code');
+    }
 
     return { message: RESET_PASSWORD_MESSAGE };
   }
@@ -366,7 +374,11 @@ export class AuthService {
       throw new UnauthorizedException('Google sign-in failed');
     }
 
-    await this.usersService.linkGoogleAccount(existing, identity.googleId);
+    if (
+      !(await this.usersService.linkGoogleAccount(existing, identity.googleId))
+    ) {
+      throw new UnauthorizedException('Google sign-in failed');
+    }
 
     return existing;
   }
@@ -410,7 +422,14 @@ export class AuthService {
       throw new UnauthorizedException('Google sign-in failed');
     }
 
-    await this.companiesService.linkGoogleAccount(existing, identity.googleId);
+    if (
+      !(await this.companiesService.linkGoogleAccount(
+        existing,
+        identity.googleId,
+      ))
+    ) {
+      throw new UnauthorizedException('Google sign-in failed');
+    }
 
     return existing;
   }

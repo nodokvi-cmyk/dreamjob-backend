@@ -149,7 +149,7 @@ export class CompaniesService implements EmailChangeStore {
   async linkGoogleAccount(
     company: CompanyDocument,
     googleId: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const update: UpdateQuery<Company> = company.isVerified
       ? { $set: { googleId } }
       : {
@@ -163,7 +163,11 @@ export class CompaniesService implements EmailChangeStore {
           },
         };
 
-    await this.companyModel.updateOne({ _id: company._id }, update);
+    const { matchedCount } = await this.companyModel.updateOne(
+      { _id: company._id },
+      update,
+    );
+    return matchedCount > 0;
   }
 
   findByEmailWithPassword(email: string): Promise<CompanyDocument | null> {
@@ -216,8 +220,8 @@ export class CompaniesService implements EmailChangeStore {
     );
   }
 
-  async resetPassword(email: string, passwordHash: string): Promise<void> {
-    await this.companyModel.updateOne(
+  async resetPassword(email: string, passwordHash: string): Promise<boolean> {
+    const { matchedCount } = await this.companyModel.updateOne(
       { email },
       {
         $set: { password: passwordHash, isVerified: true },
@@ -229,10 +233,11 @@ export class CompaniesService implements EmailChangeStore {
         },
       },
     );
+    return matchedCount > 0;
   }
 
-  async markEmailVerified(email: string): Promise<void> {
-    await this.companyModel.updateOne(
+  async markEmailVerified(email: string): Promise<boolean> {
+    const { matchedCount } = await this.companyModel.updateOne(
       { email },
       {
         $set: { isVerified: true },
@@ -244,6 +249,7 @@ export class CompaniesService implements EmailChangeStore {
         },
       },
     );
+    return matchedCount > 0;
   }
 
   claimEmailChangeAttempt(id: string): Promise<CompanyDocument | null> {

@@ -256,7 +256,10 @@ export class UsersService implements EmailChangeStore {
     return this.userModel.findOne({ googleId });
   }
 
-  async linkGoogleAccount(user: UserDocument, googleId: string): Promise<void> {
+  async linkGoogleAccount(
+    user: UserDocument,
+    googleId: string,
+  ): Promise<boolean> {
     const update: UpdateQuery<User> = user.isVerified
       ? { $set: { googleId } }
       : {
@@ -270,7 +273,11 @@ export class UsersService implements EmailChangeStore {
           },
         };
 
-    await this.userModel.updateOne({ _id: user._id }, update);
+    const { matchedCount } = await this.userModel.updateOne(
+      { _id: user._id },
+      update,
+    );
+    return matchedCount > 0;
   }
 
   findByEmailWithPassword(email: string): Promise<UserDocument | null> {
@@ -321,8 +328,8 @@ export class UsersService implements EmailChangeStore {
     );
   }
 
-  async resetPassword(email: string, passwordHash: string): Promise<void> {
-    await this.userModel.updateOne(
+  async resetPassword(email: string, passwordHash: string): Promise<boolean> {
+    const { matchedCount } = await this.userModel.updateOne(
       { email },
       {
         $set: { password: passwordHash, isVerified: true },
@@ -334,10 +341,11 @@ export class UsersService implements EmailChangeStore {
         },
       },
     );
+    return matchedCount > 0;
   }
 
-  async markEmailVerified(email: string): Promise<void> {
-    await this.userModel.updateOne(
+  async markEmailVerified(email: string): Promise<boolean> {
+    const { matchedCount } = await this.userModel.updateOne(
       { email },
       {
         $set: { isVerified: true },
@@ -349,6 +357,7 @@ export class UsersService implements EmailChangeStore {
         },
       },
     );
+    return matchedCount > 0;
   }
 
   claimEmailChangeAttempt(id: string): Promise<UserDocument | null> {
