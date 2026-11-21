@@ -1,4 +1,9 @@
-import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PasswordSetupService } from '../password-setup/password-setup.service.js';
 import type { OptionalAuthRequest } from '../shared/types/optional-auth-request.js';
@@ -7,6 +12,8 @@ import { getBearerToken } from './bearer-token.js';
 
 @Injectable()
 export class OptionalAuthGuard implements CanActivate {
+  private readonly logger = new Logger(OptionalAuthGuard.name);
+
   constructor(
     private readonly jwtService: JwtService,
     private readonly passwordSetupService: PasswordSetupService,
@@ -32,8 +39,10 @@ export class OptionalAuthGuard implements CanActivate {
         payload.accountId,
         payload.accountRole,
       );
-    } catch {
-      blocked = true;
+    } catch (error: unknown) {
+      this.logger.warn(
+        `Password-lock check failed, treated as anonymous: ${error instanceof Error ? error.name : 'unknown error'}`,
+      );
     }
     if (blocked) return true;
 
