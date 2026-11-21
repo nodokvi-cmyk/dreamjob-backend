@@ -231,15 +231,22 @@ export class VacancyBillingService {
         { _id: companyId },
         { $inc: { purchasedCredits: 1 } },
       );
-      await this.vacancyModel.updateOne(
-        { _id: vacancyId, checkoutSessionId: session.id },
-        { $unset: { checkoutSessionId: 1 } },
-      );
-      return 'credited';
     } catch (error: unknown) {
       await this.paymentModel.deleteOne({ stripeSessionId: session.id });
       throw error;
     }
+
+    try {
+      await this.vacancyModel.updateOne(
+        { _id: vacancyId, checkoutSessionId: session.id },
+        { $unset: { checkoutSessionId: 1 } },
+      );
+    } catch (error: unknown) {
+      this.logger.warn(
+        `Credited checkout not cleared from the vacancy: ${error instanceof Error ? error.name : 'unknown error'}`,
+      );
+    }
+    return 'credited';
   }
 
   async describe(session: Stripe.Checkout.Session) {
