@@ -37,11 +37,14 @@ import {
 import { STRIPE_CLIENT } from './stripe-client.js';
 import { ensureStripeCustomer } from './stripe-customer.js';
 
+export type FulfillOutcome = 'applied' | 'credited' | 'claimed' | 'ignored';
+
 export type VacancyBillingResult =
   | { kind: 'done'; vacancy: VacancyRecord }
   | { kind: 'checkout'; checkoutUrl: string };
 
 const WINDOW_MS = VACANCY_WINDOW_DAYS * MS_PER_DAY;
+const CLAIM_IN_PROGRESS_MS = 5 * 60 * 1000;
 
 @Injectable()
 export class VacancyBillingService {
@@ -186,18 +189,18 @@ export class VacancyBillingService {
     }
   }
 
-  async fulfill(session: Stripe.Checkout.Session): Promise<void> {
+  async fulfill(session: Stripe.Checkout.Session): Promise<FulfillOutcome> {
     const metadata = session.metadata;
-    if (!metadata) return;
+    if (!metadata) return 'ignored';
 
     const { companyId, vacancyId, purpose, newDeadline } = metadata;
-    if (!companyId || !Types.ObjectId.isValid(companyId)) return;
-    if (!vacancyId || !Types.ObjectId.isValid(vacancyId)) return;
+    if (!companyId || !Types.ObjectId.isValid(companyId)) return 'ignored';
+    if (!vacancyId || !Types.ObjectId.isValid(vacancyId)) return 'ignored';
     if (
       purpose !== VacancyPaymentPurpose.SUBMIT &&
       purpose !== VacancyPaymentPurpose.EXTEND
     ) {
-      return;
+      return 'ignored';
     }
 
     const deadline = newDeadline ? new Date(newDeadline) : undefined;
@@ -205,7 +208,7 @@ export class VacancyBillingService {
       purpose === VacancyPaymentPurpose.EXTEND &&
       (!deadline || Number.isNaN(deadline.getTime()))
     ) {
-      return;
+      return 'ignored';
     }
 
     const claimed = await claimPayment(this.paymentModel, session.id, {
@@ -215,20 +218,24 @@ export class VacancyBillingService {
       purpose,
       amount: session.amount_total ?? undefined,
     });
-    if (!claimed) return;
+    if (!claimed) return 'claimed';
 
     try {
       const applied =
         purpose === VacancyPaymentPurpose.SUBMIT || !deadline
           ? await this.applyPaidSubmit(vacancyId, companyId)
           : await this.applyPaidExtension(vacancyId, companyId, deadline);
+      if (applied) return 'applied';
 
-      if (!applied) {
-        await this.companyModel.updateOne(
-          { _id: companyId },
-          { $inc: { purchasedCredits: 1 } },
-        );
-      }
+      await this.companyModel.updateOne(
+        { _id: companyId },
+        { $inc: { purchasedCredits: 1 } },
+      );
+      await this.vacancyModel.updateOne(
+        { _id: vacancyId, checkoutSessionId: session.id },
+        { $unset: { checkoutSessionId: 1 } },
+      );
+      return 'credited';
     } catch (error: unknown) {
       await this.paymentModel.deleteOne({ stripeSessionId: session.id });
       throw error;
@@ -538,14 +545,31 @@ export class VacancyBillingService {
       return undefined;
     }
 
-    await this.fulfill(session);
+    const outcome = await this.fulfill(session);
 
     const fresh = await this.vacancyModel
       .findById(vacancy._id)
       .lean<VacancyRecord>();
     if (!fresh) throw new NotFoundException('Vacancy not found');
+    if (
+      outcome === 'claimed' &&
+      fresh.checkoutSessionId === session.id &&
+      (await this.isClaimRecent(session.id))
+    ) {
+      throw new ConflictException(
+        'Payment is being processed, try again in a moment',
+      );
+    }
 
     return fresh;
+  }
+
+  private async isClaimRecent(sessionId: string): Promise<boolean> {
+    const recent = await this.paymentModel.exists({
+      stripeSessionId: sessionId,
+      createdAt: { $gt: new Date(Date.now() - CLAIM_IN_PROGRESS_MS) },
+    });
+    return recent !== null;
   }
 
   private async reusableSessionUrl(

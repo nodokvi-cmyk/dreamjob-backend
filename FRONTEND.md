@@ -152,6 +152,7 @@ Per list:
 - Both submit and extend answer `200` with one of two shapes. Branch on `status`:
   - `{ status: 'done', vacancy }`: finished. For submit the vacancy is now `pending`.
   - `{ status: 'paymentRequired', checkoutUrl }`: send the browser to `checkoutUrl` (`window.location.assign`). Pressing Submit again while a payment is open returns the same link.
+  - 409 `Payment is being processed, try again in a moment` (submit and extend): the vacancy's checkout was just paid and Stripe's confirmation is still being applied. Show the message and reload the vacancy after a second or two; never treat it as unpaid. Pressing Submit or Extend after paying applies that payment and returns `done` instead of a new link.
 - After a payment the person comes back to `/company/vacancies?payment=success&session_id=cs_...` (or `?payment=cancelled`). On success call `GET /payment/confirm?sessionId=<session_id>` (see Billing), then reload the list.
 - Warn near the Submit button and before the Stripe redirect: credits and payments are not refunded in cash.
 
