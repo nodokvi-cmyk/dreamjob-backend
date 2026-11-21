@@ -206,6 +206,7 @@ export class VacancyBillingService {
       vacancy: new Types.ObjectId(paid.vacancyId),
       purpose: paid.purpose,
       amount: session.amount_total ?? undefined,
+      inProgress: true,
     });
     if (!claimed) return 'claimed';
 
@@ -243,26 +244,54 @@ export class VacancyBillingService {
     sessionId: string,
     { companyId, vacancyId, purpose, deadline }: PaidCheckout,
   ): Promise<'applied' | 'credited'> {
+    let applied: boolean;
     try {
-      const applied =
+      applied =
         purpose === VacancyPaymentPurpose.SUBMIT || !deadline
           ? await this.applyPaidSubmit(vacancyId, companyId)
           : await this.applyPaidExtension(vacancyId, companyId, deadline);
-      if (applied) return 'applied';
-
-      await this.vacancyModel.updateOne(
-        { _id: vacancyId, checkoutSessionId: sessionId },
-        { $unset: { checkoutSessionId: 1 } },
-      );
-      await this.companyModel.updateOne(
-        { _id: companyId },
-        { $inc: { purchasedCredits: 1 } },
-      );
+      if (!applied) await this.creditPayment(sessionId, vacancyId, companyId);
     } catch (error: unknown) {
       await this.paymentModel.deleteOne({ stripeSessionId: sessionId });
       throw error;
     }
-    return 'credited';
+
+    if (!applied) return 'credited';
+    try {
+      await this.paymentModel.updateOne(
+        { stripeSessionId: sessionId },
+        { $unset: { inProgress: 1 } },
+      );
+    } catch (error: unknown) {
+      this.logger.warn(
+        `Applied payment not marked finished: ${error instanceof Error ? error.name : 'unknown error'}`,
+      );
+    }
+    return 'applied';
+  }
+
+  private async creditPayment(
+    sessionId: string,
+    vacancyId: string,
+    companyId: string,
+  ): Promise<void> {
+    await this.paymentModel.db.transaction(async (session) => {
+      await this.vacancyModel.updateOne(
+        { _id: vacancyId, checkoutSessionId: sessionId },
+        { $unset: { checkoutSessionId: 1 } },
+        { session },
+      );
+      await this.companyModel.updateOne(
+        { _id: companyId },
+        { $inc: { purchasedCredits: 1 } },
+        { session },
+      );
+      await this.paymentModel.updateOne(
+        { stripeSessionId: sessionId },
+        { $unset: { inProgress: 1 } },
+        { session },
+      );
+    });
   }
 
   async describe(session: Stripe.Checkout.Session) {
@@ -576,12 +605,20 @@ export class VacancyBillingService {
     }
 
     const paid = this.paidCheckout(session);
-    if (!paid || !(await this.takeOverStaleClaim(session.id))) {
+    const claim = paid ? await this.takeOverStaleClaim(session.id) : 'busy';
+    if (claim === 'busy' || !paid) {
       throw new ConflictException(
         'Payment is being processed, try again in a moment',
       );
     }
-    await this.completeClaimed(session.id, paid);
+    if (claim === 'taken') {
+      await this.completeClaimed(session.id, paid);
+    } else {
+      await this.vacancyModel.updateOne(
+        { _id: vacancy._id, checkoutSessionId: session.id },
+        { $unset: { checkoutSessionId: 1 } },
+      );
+    }
     return this.findVacancy(vacancy._id);
   }
 
@@ -591,15 +628,24 @@ export class VacancyBillingService {
     return vacancy;
   }
 
-  private async takeOverStaleClaim(sessionId: string): Promise<boolean> {
+  private async takeOverStaleClaim(
+    sessionId: string,
+  ): Promise<'taken' | 'busy' | 'finished'> {
     const taken = await this.paymentModel.collection.findOneAndUpdate(
       {
         stripeSessionId: sessionId,
+        inProgress: true,
         createdAt: { $lte: new Date(Date.now() - CLAIM_IN_PROGRESS_MS) },
       },
       { $set: { createdAt: new Date() } },
     );
-    return taken !== null;
+    if (taken !== null) return 'taken';
+
+    const claim = await this.paymentModel
+      .findOne({ stripeSessionId: sessionId })
+      .select('inProgress')
+      .lean<Pick<Payment, 'inProgress'>>();
+    return !claim || claim.inProgress ? 'busy' : 'finished';
   }
 
   private async reusableSessionUrl(

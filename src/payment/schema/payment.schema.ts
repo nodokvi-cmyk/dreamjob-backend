@@ -36,6 +36,9 @@ export class Payment {
 
   @Prop({ type: Number, required: false })
   amount?: number;
+
+  @Prop({ type: Boolean, required: false })
+  inProgress?: boolean;
 }
 
 export type PaymentDocument = HydratedDocument<Payment>;
