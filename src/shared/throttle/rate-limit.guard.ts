@@ -20,6 +20,7 @@ interface Bucket {
 
 const DEFAULT_LIMIT: ThrottleLimit = { limit: 30, ttl: 60_000 };
 const SWEEP_THRESHOLD = 10_000;
+const SWEEP_INTERVAL_MS = 60_000;
 
 interface ThrottledRequest {
   ip?: string;
@@ -46,6 +47,7 @@ function tooManyRequests(): HttpException {
 export class RateLimitGuard implements CanActivate {
   private readonly buckets = new Map<string, Bucket>();
   private readonly secretDigest: Buffer;
+  private lastSweepAt = 0;
 
   constructor(
     private readonly reflector: Reflector,
@@ -70,7 +72,11 @@ export class RateLimitGuard implements CanActivate {
       : (request.ip ?? 'unknown');
     const key = `${ip}:${context.getClass().name}:${context.getHandler().name}`;
 
-    if (this.buckets.size > SWEEP_THRESHOLD) {
+    if (
+      this.buckets.size > SWEEP_THRESHOLD &&
+      now - this.lastSweepAt > SWEEP_INTERVAL_MS
+    ) {
+      this.lastSweepAt = now;
       this.sweep(now);
     }
 
