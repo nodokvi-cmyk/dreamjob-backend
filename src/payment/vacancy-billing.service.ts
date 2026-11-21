@@ -56,7 +56,6 @@ const CLAIM_IN_PROGRESS_MS = 15 * 60 * 1000;
 
 function isTemporaryStripeError(error: unknown): boolean {
   return (
-    !(error instanceof Stripe.errors.StripeError) ||
     error instanceof Stripe.errors.StripeConnectionError ||
     error instanceof Stripe.errors.StripeAPIError ||
     error instanceof Stripe.errors.StripeRateLimitError
@@ -455,6 +454,7 @@ export class VacancyBillingService {
         company: companyId,
         status: VacancyStatus.PENDING,
         submittedAt: { $exists: false },
+        deadline: { $gt: new Date() },
       },
       {
         $set: {
@@ -705,7 +705,13 @@ export class VacancyBillingService {
           'Payment provider unavailable, try again in a moment',
         );
       }
-      return undefined;
+      if (error instanceof Stripe.errors.StripeError) return undefined;
+      throw error;
+    }
+    if (session.status === 'complete' && session.payment_status === 'paid') {
+      throw new ConflictException(
+        'Payment is being processed, try again in a moment',
+      );
     }
     if (session.status !== 'open') return undefined;
 
