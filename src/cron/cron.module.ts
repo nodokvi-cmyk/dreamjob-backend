@@ -4,7 +4,10 @@ import {
   Application,
   applicationSchema,
 } from '../applications/schema/application.schema.js';
+import { ApplicationsModule } from '../applications/applications.module.js';
 import { AwsS3Module } from '../aws-s3/aws-s3.module.js';
+import { BookmarksModule } from '../bookmarks/bookmarks.module.js';
+import { InvitationsModule } from '../invitations/invitations.module.js';
 import {
   Bookmark,
   bookmarkSchema,
@@ -40,6 +43,9 @@ import { S3SweepService } from './s3-sweep.service.js';
     AwsS3Module,
     UsersModule,
     CompaniesModule,
+    ApplicationsModule,
+    BookmarksModule,
+    InvitationsModule,
     MongooseModule.forFeature([
       { name: User.name, schema: userSchema },
       { name: Company.name, schema: companySchema },
