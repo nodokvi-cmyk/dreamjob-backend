@@ -376,7 +376,11 @@ export class CompaniesService implements EmailChangeStore {
       currentPassword,
       newPassword,
     );
-    await this.companyModel.updateOne({ _id: id }, { $set: { password } });
+    const { matchedCount } = await this.companyModel.updateOne(
+      { _id: id },
+      { $set: { password } },
+    );
+    if (matchedCount === 0) throw new NotFoundException('Company not found');
   }
 
   async chooseFreePlan(id: string): Promise<CompanyDocument> {

@@ -463,7 +463,11 @@ export class UsersService implements EmailChangeStore {
       currentPassword,
       newPassword,
     );
-    await this.userModel.updateOne({ _id: id }, { $set: { password } });
+    const { matchedCount } = await this.userModel.updateOne(
+      { _id: id },
+      { $set: { password } },
+    );
+    if (matchedCount === 0) throw new NotFoundException('User not found');
   }
 
   async remove(id: string): Promise<UserDocument> {
