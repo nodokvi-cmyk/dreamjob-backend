@@ -9,7 +9,10 @@ import { CompaniesService } from '../companies/companies.service.js';
 import { Company } from '../companies/schema/company.schema.js';
 import { EmailClaim } from '../email-claims/schema/email-claim.schema.js';
 import { InvitationsService } from '../invitations/invitations.service.js';
-import { Invitation } from '../invitations/schema/invitation.schema.js';
+import {
+  Invitation,
+  InvitationStatus,
+} from '../invitations/schema/invitation.schema.js';
 import { Notification } from '../notifications/schema/notification.schema.js';
 import { Publication } from '../publications/schema/publication.schema.js';
 import { AuthRole } from '../shared/types/auth-role.js';
@@ -179,6 +182,9 @@ export class CronService {
       this.collectMissing([
         this.missingOwners(this.applicationModel, 'vacancy', vacancies),
         this.missingOwners(this.bookmarkModel, 'vacancy', vacancies),
+        this.missingOwners(this.invitationModel, 'vacancy', vacancies, {
+          status: InvitationStatus.INVITED,
+        }),
       ]),
       this.collectMissing([
         this.missingOwners(this.invitationModel, 'publication', publications),
@@ -189,6 +195,7 @@ export class CronService {
       const removed = await this.repairOne(async () => {
         await this.applicationsService.removeForVacancies(vacancyIds);
         await this.bookmarksService.removeForVacancies(vacancyIds);
+        await this.invitationsService.releaseForVacancies(vacancyIds);
       });
       if (removed) result.vacancies += vacancyIds.length;
       else result.failed += 1;

@@ -615,6 +615,17 @@ export class InvitationsService {
     );
   }
 
+  async releaseForVacancies(vacancyIds: string[]): Promise<void> {
+    if (vacancyIds.length === 0) return;
+    await this.invitationModel.updateMany(
+      {
+        vacancy: { $in: vacancyIds.map((id) => new Types.ObjectId(id)) },
+        status: InvitationStatus.INVITED,
+      },
+      { $set: { status: InvitationStatus.CANCELLED } },
+    );
+  }
+
   async removeForCompany(companyId: string): Promise<void> {
     await this.invitationModel.deleteMany({
       company: new Types.ObjectId(companyId),
