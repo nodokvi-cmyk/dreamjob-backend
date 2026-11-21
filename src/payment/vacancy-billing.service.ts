@@ -39,6 +39,13 @@ import { ensureStripeCustomer } from './stripe-customer.js';
 
 export type FulfillOutcome = 'applied' | 'credited' | 'claimed' | 'ignored';
 
+type PaidCheckout = {
+  companyId: string;
+  vacancyId: string;
+  purpose: VacancyPaymentPurpose;
+  deadline?: Date;
+};
+
 export type VacancyBillingResult =
   | { kind: 'done'; vacancy: VacancyRecord }
   | { kind: 'checkout'; checkoutUrl: string };
@@ -190,17 +197,35 @@ export class VacancyBillingService {
   }
 
   async fulfill(session: Stripe.Checkout.Session): Promise<FulfillOutcome> {
+    const paid = this.paidCheckout(session);
+    if (!paid) return 'ignored';
+
+    const claimed = await claimPayment(this.paymentModel, session.id, {
+      company: new Types.ObjectId(paid.companyId),
+      kind: PaymentKind.VACANCY,
+      vacancy: new Types.ObjectId(paid.vacancyId),
+      purpose: paid.purpose,
+      amount: session.amount_total ?? undefined,
+    });
+    if (!claimed) return 'claimed';
+
+    return this.completeClaimed(session.id, paid);
+  }
+
+  private paidCheckout(
+    session: Stripe.Checkout.Session,
+  ): PaidCheckout | undefined {
     const metadata = session.metadata;
-    if (!metadata) return 'ignored';
+    if (!metadata) return undefined;
 
     const { companyId, vacancyId, purpose, newDeadline } = metadata;
-    if (!companyId || !Types.ObjectId.isValid(companyId)) return 'ignored';
-    if (!vacancyId || !Types.ObjectId.isValid(vacancyId)) return 'ignored';
+    if (!companyId || !Types.ObjectId.isValid(companyId)) return undefined;
+    if (!vacancyId || !Types.ObjectId.isValid(vacancyId)) return undefined;
     if (
       purpose !== VacancyPaymentPurpose.SUBMIT &&
       purpose !== VacancyPaymentPurpose.EXTEND
     ) {
-      return 'ignored';
+      return undefined;
     }
 
     const deadline = newDeadline ? new Date(newDeadline) : undefined;
@@ -208,18 +233,16 @@ export class VacancyBillingService {
       purpose === VacancyPaymentPurpose.EXTEND &&
       (!deadline || Number.isNaN(deadline.getTime()))
     ) {
-      return 'ignored';
+      return undefined;
     }
 
-    const claimed = await claimPayment(this.paymentModel, session.id, {
-      company: new Types.ObjectId(companyId),
-      kind: PaymentKind.VACANCY,
-      vacancy: new Types.ObjectId(vacancyId),
-      purpose,
-      amount: session.amount_total ?? undefined,
-    });
-    if (!claimed) return 'claimed';
+    return { companyId, vacancyId, purpose, deadline };
+  }
 
+  private async completeClaimed(
+    sessionId: string,
+    { companyId, vacancyId, purpose, deadline }: PaidCheckout,
+  ): Promise<'applied' | 'credited'> {
     try {
       const applied =
         purpose === VacancyPaymentPurpose.SUBMIT || !deadline
@@ -227,24 +250,17 @@ export class VacancyBillingService {
           : await this.applyPaidExtension(vacancyId, companyId, deadline);
       if (applied) return 'applied';
 
+      await this.vacancyModel.updateOne(
+        { _id: vacancyId, checkoutSessionId: sessionId },
+        { $unset: { checkoutSessionId: 1 } },
+      );
       await this.companyModel.updateOne(
         { _id: companyId },
         { $inc: { purchasedCredits: 1 } },
       );
     } catch (error: unknown) {
-      await this.paymentModel.deleteOne({ stripeSessionId: session.id });
+      await this.paymentModel.deleteOne({ stripeSessionId: sessionId });
       throw error;
-    }
-
-    try {
-      await this.vacancyModel.updateOne(
-        { _id: vacancyId, checkoutSessionId: session.id },
-        { $unset: { checkoutSessionId: 1 } },
-      );
-    } catch (error: unknown) {
-      this.logger.warn(
-        `Credited checkout not cleared from the vacancy: ${error instanceof Error ? error.name : 'unknown error'}`,
-      );
     }
     return 'credited';
   }
@@ -554,29 +570,36 @@ export class VacancyBillingService {
 
     const outcome = await this.fulfill(session);
 
-    const fresh = await this.vacancyModel
-      .findById(vacancy._id)
-      .lean<VacancyRecord>();
-    if (!fresh) throw new NotFoundException('Vacancy not found');
-    if (
-      outcome === 'claimed' &&
-      fresh.checkoutSessionId === session.id &&
-      (await this.isClaimRecent(session.id))
-    ) {
+    const fresh = await this.findVacancy(vacancy._id);
+    if (outcome !== 'claimed' || fresh.checkoutSessionId !== session.id) {
+      return fresh;
+    }
+
+    const paid = this.paidCheckout(session);
+    if (!paid || !(await this.takeOverStaleClaim(session.id))) {
       throw new ConflictException(
         'Payment is being processed, try again in a moment',
       );
     }
-
-    return fresh;
+    await this.completeClaimed(session.id, paid);
+    return this.findVacancy(vacancy._id);
   }
 
-  private async isClaimRecent(sessionId: string): Promise<boolean> {
-    const recent = await this.paymentModel.exists({
-      stripeSessionId: sessionId,
-      createdAt: { $gt: new Date(Date.now() - CLAIM_IN_PROGRESS_MS) },
-    });
-    return recent !== null;
+  private async findVacancy(id: Types.ObjectId): Promise<VacancyRecord> {
+    const vacancy = await this.vacancyModel.findById(id).lean<VacancyRecord>();
+    if (!vacancy) throw new NotFoundException('Vacancy not found');
+    return vacancy;
+  }
+
+  private async takeOverStaleClaim(sessionId: string): Promise<boolean> {
+    const taken = await this.paymentModel.collection.findOneAndUpdate(
+      {
+        stripeSessionId: sessionId,
+        createdAt: { $lte: new Date(Date.now() - CLAIM_IN_PROGRESS_MS) },
+      },
+      { $set: { createdAt: new Date() } },
+    );
+    return taken !== null;
   }
 
   private async reusableSessionUrl(
