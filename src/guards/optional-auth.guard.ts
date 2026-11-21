@@ -26,10 +26,15 @@ export class OptionalAuthGuard implements CanActivate {
 
     if (!isJwtPayload(payload)) return true;
 
-    const blocked = await this.passwordSetupService.isBlocked(
-      payload.accountId,
-      payload.accountRole,
-    );
+    let blocked = true;
+    try {
+      blocked = await this.passwordSetupService.isBlocked(
+        payload.accountId,
+        payload.accountRole,
+      );
+    } catch {
+      blocked = true;
+    }
     if (blocked) return true;
 
     request.accountId = payload.accountId;
