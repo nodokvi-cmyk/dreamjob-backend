@@ -38,7 +38,10 @@ import {
 } from '../shared/mongo/search-patterns.js';
 import { AuthRole } from '../shared/types/auth-role.js';
 import type { Viewer } from '../shared/types/viewer.js';
-import { CreateVacancyDto } from './dto/create-vacancy.dto.js';
+import {
+  CreateVacancyDto,
+  MAX_DEADLINE_DAYS,
+} from './dto/create-vacancy.dto.js';
 import { UpdateVacancyDto } from './dto/update-vacancy.dto.js';
 import {
   AdminVacanciesFilterDto,
@@ -414,6 +417,14 @@ export class VacanciesService {
       ) {
         throw new BadRequestException(
           'Use the extend route to move the deadline later',
+        );
+      }
+      if (
+        !vacancy.firstPublishedAt &&
+        deadline.getTime() > now.getTime() + MAX_DEADLINE_DAYS * MS_PER_DAY
+      ) {
+        throw new BadRequestException(
+          `The deadline can be at most ${MAX_DEADLINE_DAYS} days from today`,
         );
       }
       changes.deadline = deadline;

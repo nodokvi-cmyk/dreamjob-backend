@@ -179,7 +179,7 @@ Per list:
 
 ### The 60-day window, deadline and extension
 
-- At the first approval the vacancy gets a window of 60 days: `freeWindowEndsAt` (owner and admin view only) is the latest deadline the company can set without paying again. The deadline itself is chosen by the company and is at most 60 days from today when set in a create or edit.
+- At the first approval the vacancy gets a window of 60 days: `freeWindowEndsAt` (owner and admin view only) is the latest deadline the company can set without paying again. The deadline itself is chosen by the company and is at most 60 days from today when set in a create, or in an edit of a vacancy that was never published (400 `The deadline can be at most 60 days from today`). An edit of a vacancy that was published before can only move the deadline earlier: any future date before the current one is allowed, even when a paid extension put the current deadline more than 60 days away (fixed 2026-11-21; it was refused before).
 - Once a vacancy has been published (`firstPublishedAt` is set), `PATCH` refuses a later deadline (400 `Use the extend route to move the deadline later`). A shorter deadline is allowed through `PATCH`.
 - Extend: `POST /vacancies/:id/extend { deadline }`. Only vacancies published at least once and not closed (400 `Only vacancies that were published can be extended`, `Closed vacancies cannot be extended`). The new deadline must be later than the current one and in the future (400 `The new deadline must be later than the current one`).
   - Deadline on or before the window end: free, immediate, no admin review. An expired vacancy becomes live again. Answer `{ status: 'done', vacancy }`.
