@@ -95,7 +95,7 @@ type AcceptPublication = Pick<
 export type CompanyInvitation = {
   id: string;
   status: InvitationStatus;
-  vacancyId: string;
+  vacancyId: string | null;
   grantsAccess: boolean;
   canInvite: boolean;
 };
@@ -542,21 +542,26 @@ export class InvitationsService {
     ]);
 
     return new Map(
-      invitations.map((invitation) => [
-        invitation.publication.toString(),
-        {
-          id: invitation._id.toString(),
-          status: invitation.status,
-          vacancyId: invitation.vacancy.toString(),
-          grantsAccess: granting.has(invitation._id.toString()),
-          canInvite:
-            (invitation.status === InvitationStatus.CANCELLED ||
-              invitation.status === InvitationStatus.DECLINED ||
-              (invitation.status === InvitationStatus.ACCEPTED &&
-                !liveVacancies.has(invitation.vacancy.toString()))) &&
-            (invitation.sends ?? 1) < MAX_INVITATION_SENDS,
-        },
-      ]),
+      invitations.map((invitation) => {
+        const vacancyGone =
+          invitation.status === InvitationStatus.ACCEPTED &&
+          !liveVacancies.has(invitation.vacancy.toString());
+
+        return [
+          invitation.publication.toString(),
+          {
+            id: invitation._id.toString(),
+            status: invitation.status,
+            vacancyId: vacancyGone ? null : invitation.vacancy.toString(),
+            grantsAccess: granting.has(invitation._id.toString()),
+            canInvite:
+              (invitation.status === InvitationStatus.CANCELLED ||
+                invitation.status === InvitationStatus.DECLINED ||
+                vacancyGone) &&
+              (invitation.sends ?? 1) < MAX_INVITATION_SENDS,
+          },
+        ];
+      }),
     );
   }
 
