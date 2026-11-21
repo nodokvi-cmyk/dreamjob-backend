@@ -185,7 +185,7 @@ export class InvitationsService {
     await this.removeIfOrphaned(invitation, companyId, previous);
 
     if (!(await this.spendInvite(companyId))) {
-      await this.undoSend(invitation._id, previous);
+      await this.undoSend(invitation, previous);
       const { limit } = await this.quota(companyId);
       throw new BadRequestException(
         `Monthly invitation limit reached (${limit}). It resets at the start of next month (UTC).`,
@@ -693,9 +693,12 @@ export class InvitationsService {
     return 'You already invited this publication';
   }
 
-  private async undoSend(id: Types.ObjectId, previous?: InvitationRecord) {
+  private async undoSend(
+    invitation: InvitationRecord,
+    previous?: InvitationRecord,
+  ) {
     if (!previous) {
-      await this.invitationModel.deleteOne({ _id: id });
+      await this.invitationModel.deleteOne({ _id: invitation._id });
       return;
     }
 
@@ -704,7 +707,14 @@ export class InvitationsService {
     if (!previous.respondedAt) unset.respondedAt = '';
 
     await this.invitationModel.updateOne(
-      { _id: id, status: InvitationStatus.INVITED },
+      {
+        _id: invitation._id,
+        status: {
+          $in: [InvitationStatus.INVITED, InvitationStatus.CANCELLED],
+        },
+        sends: MAX_INVITATION_SENDS,
+        vacancy: invitation.vacancy,
+      },
       {
         $set: {
           status: previous.status,
@@ -737,7 +747,7 @@ export class InvitationsService {
     if (publicationExists && vacancyExists && companyExists) return;
 
     if (publicationExists && companyExists) {
-      await this.undoSend(invitation._id, previous);
+      await this.undoSend(invitation, previous);
     } else {
       await this.invitationModel.deleteOne({ _id: invitation._id });
     }
