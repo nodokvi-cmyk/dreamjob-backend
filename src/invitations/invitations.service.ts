@@ -522,7 +522,14 @@ export class InvitationsService {
         (AccessSource &
           Pick<InvitationRecord, 'publication' | 'vacancy' | 'sends'>)[]
       >();
-    const granting = await this.accessGrantingIds(invitations);
+    const [granting, liveVacancies] = await Promise.all([
+      this.accessGrantingIds(invitations),
+      this.existingVacancyIds(
+        invitations
+          .filter(({ status }) => status === InvitationStatus.ACCEPTED)
+          .map(({ vacancy }) => vacancy),
+      ),
+    ]);
 
     return new Map(
       invitations.map((invitation) => [
@@ -534,11 +541,25 @@ export class InvitationsService {
           grantsAccess: granting.has(invitation._id.toString()),
           canInvite:
             (invitation.status === InvitationStatus.CANCELLED ||
-              invitation.status === InvitationStatus.DECLINED) &&
+              invitation.status === InvitationStatus.DECLINED ||
+              (invitation.status === InvitationStatus.ACCEPTED &&
+                !liveVacancies.has(invitation.vacancy.toString()))) &&
             (invitation.sends ?? 1) < MAX_INVITATION_SENDS,
         },
       ]),
     );
+  }
+
+  private async existingVacancyIds(
+    vacancyIds: readonly Types.ObjectId[],
+  ): Promise<Set<string>> {
+    if (vacancyIds.length === 0) return new Set();
+
+    const found = await this.vacancyModel
+      .find({ _id: { $in: vacancyIds } })
+      .select('_id')
+      .lean<{ _id: Types.ObjectId }[]>();
+    return new Set(found.map(({ _id }) => _id.toString()));
   }
 
   private async accessGrantingIds(
@@ -592,10 +613,6 @@ export class InvitationsService {
       { vacancy: vacancyId, status: InvitationStatus.INVITED },
       { $set: { status: InvitationStatus.CANCELLED } },
     );
-    await this.invitationModel.deleteMany({
-      vacancy: vacancyId,
-      status: InvitationStatus.ACCEPTED,
-    });
   }
 
   async removeForCompany(companyId: string): Promise<void> {
@@ -627,6 +644,14 @@ export class InvitationsService {
     }
 
     const pair = { publication: fields.publication, company: fields.company };
+    const existing = await this.invitationModel
+      .findOne(pair)
+      .select('status sends vacancy')
+      .lean<Pick<InvitationRecord, 'status' | 'sends' | 'vacancy'>>();
+    const acceptedVacancyGone =
+      existing?.status === InvitationStatus.ACCEPTED &&
+      (await this.vacancyModel.exists({ _id: existing.vacancy })) === null;
+
     const changes = {
       status: InvitationStatus.INVITED,
       sends: MAX_INVITATION_SENDS,
@@ -646,12 +671,21 @@ export class InvitationsService {
               status: InvitationStatus.DECLINED,
               vacancy: { $ne: fields.vacancy },
             },
+            ...(acceptedVacancyGone && existing
+              ? [
+                  {
+                    status: InvitationStatus.ACCEPTED,
+                    vacancy: existing.vacancy,
+                  },
+                ]
+              : []),
           ],
         },
         {
           $set: changes,
           $unset: {
             respondedAt: '',
+            application: '',
             ...(fields.message ? {} : { message: '' }),
           },
         },
@@ -662,26 +696,27 @@ export class InvitationsService {
       const {
         respondedAt: _respondedAt,
         message: _message,
+        application: _application,
         ...kept
       } = previous;
       return { invitation: { ...kept, ...changes }, previous };
     }
 
-    const existing = await this.invitationModel
-      .findOne(pair)
-      .select('status sends vacancy')
-      .lean<Pick<InvitationRecord, 'status' | 'sends' | 'vacancy'>>();
-    throw new ConflictException(this.inviteConflictMessage(existing, fields));
+    throw new ConflictException(
+      this.inviteConflictMessage(existing, fields, acceptedVacancyGone),
+    );
   }
 
   private inviteConflictMessage(
     existing: Pick<InvitationRecord, 'status' | 'sends' | 'vacancy'> | null,
     fields: NewInvitation,
+    acceptedVacancyGone: boolean,
   ): string {
     const ended =
       existing?.status === InvitationStatus.CANCELLED ||
-      existing?.status === InvitationStatus.DECLINED;
-    if (ended && (existing.sends ?? 1) >= MAX_INVITATION_SENDS) {
+      existing?.status === InvitationStatus.DECLINED ||
+      acceptedVacancyGone;
+    if (ended && (existing?.sends ?? 1) >= MAX_INVITATION_SENDS) {
       return `A publication can be invited at most ${MAX_INVITATION_SENDS} times`;
     }
     if (
@@ -705,6 +740,7 @@ export class InvitationsService {
     const unset: Record<string, ''> = {};
     if (!previous.message) unset.message = '';
     if (!previous.respondedAt) unset.respondedAt = '';
+    if (!previous.application) unset.application = '';
 
     await this.invitationModel.updateOne(
       {
@@ -725,6 +761,9 @@ export class InvitationsService {
           ...(previous.message ? { message: previous.message } : {}),
           ...(previous.respondedAt
             ? { respondedAt: previous.respondedAt }
+            : {}),
+          ...(previous.application
+            ? { application: previous.application }
             : {}),
         },
         ...(Object.keys(unset).length > 0 ? { $unset: unset } : {}),
