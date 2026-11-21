@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, PipelineStage } from 'mongoose';
 import { Application } from '../applications/schema/application.schema.js';
 import { AwsS3Service } from '../aws-s3/aws-s3.service.js';
 import type { StoredObject } from '../aws-s3/aws-s3.service.js';
@@ -91,23 +91,37 @@ export class S3SweepService {
   }
 
   private async referencedKeys(): Promise<Set<string>> {
-    const lists: unknown[][] = await Promise.all([
-      this.userModel.distinct('avatarKey'),
-      this.userModel.distinct('cvKey'),
-      this.companyModel.distinct('logoKey'),
-      this.vacancyModel.distinct('photoKeys'),
-      this.applicationModel.distinct('cvKey'),
-      this.applicationModel.distinct('coverLetterKey'),
-      this.publicationModel.distinct('cvKey'),
-      this.publicationModel.distinct('coverLetterKey'),
-    ]);
-
     const keys = new Set<string>();
-    for (const list of lists) {
-      for (const key of list) {
-        if (typeof key === 'string' && key !== '') keys.add(key);
-      }
-    }
+    await Promise.all([
+      this.collectKeys(this.userModel, 'avatarKey', keys),
+      this.collectKeys(this.userModel, 'cvKey', keys),
+      this.collectKeys(this.companyModel, 'logoKey', keys),
+      this.collectKeys(this.vacancyModel, 'photoKeys', keys, true),
+      this.collectKeys(this.applicationModel, 'cvKey', keys),
+      this.collectKeys(this.applicationModel, 'coverLetterKey', keys),
+      this.collectKeys(this.publicationModel, 'cvKey', keys),
+      this.collectKeys(this.publicationModel, 'coverLetterKey', keys),
+    ]);
     return keys;
+  }
+
+  private async collectKeys<T>(
+    model: Model<T>,
+    field: string,
+    keys: Set<string>,
+    isList = false,
+  ): Promise<void> {
+    const path = `$${field}`;
+    const stages: PipelineStage[] = [
+      ...(isList ? [{ $unwind: path }] : []),
+      { $match: { [field]: { $type: 'string', $ne: '' } } },
+      { $project: { _id: 0, key: path } },
+    ];
+
+    const cursor = model.aggregate<{ key: unknown }>(stages).cursor();
+    for await (const row of cursor) {
+      const { key } = row;
+      if (typeof key === 'string') keys.add(key);
+    }
   }
 }
