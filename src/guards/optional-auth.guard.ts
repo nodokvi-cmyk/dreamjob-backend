@@ -15,7 +15,7 @@ const WARN_INTERVAL_MS = 60_000;
 @Injectable()
 export class OptionalAuthGuard implements CanActivate {
   private readonly logger = new Logger(OptionalAuthGuard.name);
-  private lastWarnAt = 0;
+  private static lastWarnAt = 0;
 
   constructor(
     private readonly jwtService: JwtService,
@@ -54,8 +54,8 @@ export class OptionalAuthGuard implements CanActivate {
 
   private warnLockCheckFailed(error: unknown): void {
     const now = Date.now();
-    if (now - this.lastWarnAt < WARN_INTERVAL_MS) return;
-    this.lastWarnAt = now;
+    if (now - OptionalAuthGuard.lastWarnAt < WARN_INTERVAL_MS) return;
+    OptionalAuthGuard.lastWarnAt = now;
     this.logger.warn(
       `Password-lock check failed, treated as anonymous: ${error instanceof Error ? error.name : 'unknown error'}`,
     );

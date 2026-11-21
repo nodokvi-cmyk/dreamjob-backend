@@ -52,7 +52,16 @@ export type VacancyBillingResult =
   | { kind: 'checkout'; checkoutUrl: string };
 
 const WINDOW_MS = VACANCY_WINDOW_DAYS * MS_PER_DAY;
-const CLAIM_IN_PROGRESS_MS = 5 * 60 * 1000;
+const CLAIM_IN_PROGRESS_MS = 15 * 60 * 1000;
+
+function isTemporaryStripeError(error: unknown): boolean {
+  return (
+    !(error instanceof Stripe.errors.StripeError) ||
+    error instanceof Stripe.errors.StripeConnectionError ||
+    error instanceof Stripe.errors.StripeAPIError ||
+    error instanceof Stripe.errors.StripeRateLimitError
+  );
+}
 
 @Injectable()
 export class VacancyBillingService {
@@ -249,11 +258,24 @@ export class VacancyBillingService {
     try {
       applied =
         purpose === VacancyPaymentPurpose.SUBMIT || !deadline
-          ? await this.applyPaidSubmit(vacancyId, companyId)
-          : await this.applyPaidExtension(vacancyId, companyId, deadline);
+          ? await this.applyPaidSubmit(vacancyId, companyId, sessionId)
+          : await this.applyPaidExtension(
+              vacancyId,
+              companyId,
+              deadline,
+              sessionId,
+            );
       if (!applied) await this.creditPayment(sessionId, vacancyId, companyId);
     } catch (error: unknown) {
-      await this.paymentModel.deleteOne({ stripeSessionId: sessionId });
+      const finished = await this.paymentModel.exists({
+        stripeSessionId: sessionId,
+        inProgress: { $exists: false },
+      });
+      if (finished) return 'credited';
+      await this.paymentModel.deleteOne({
+        stripeSessionId: sessionId,
+        inProgress: true,
+      });
       throw error;
     }
 
@@ -425,8 +447,9 @@ export class VacancyBillingService {
   private async applyPaidSubmit(
     vacancyId: string,
     companyId: string,
+    sessionId: string,
   ): Promise<boolean> {
-    const submitted = await this.vacancyModel.findOneAndUpdate(
+    const before = await this.vacancyModel.findOneAndUpdate(
       {
         _id: vacancyId,
         company: companyId,
@@ -441,14 +464,26 @@ export class VacancyBillingService {
         $unset: { checkoutSessionId: 1 },
       },
     );
+    if (!before) return false;
 
-    return submitted !== null;
+    await this.expireOtherCheckout(before.checkoutSessionId, sessionId);
+    return true;
+  }
+
+  private async expireOtherCheckout(
+    storedSessionId: string | undefined,
+    paidSessionId: string,
+  ): Promise<void> {
+    if (storedSessionId && storedSessionId !== paidSessionId) {
+      await this.expireCheckoutQuietly(storedSessionId);
+    }
   }
 
   private async applyPaidExtension(
     vacancyId: string,
     companyId: string,
     deadline: Date,
+    sessionId: string,
   ): Promise<boolean> {
     const vacancy = await this.vacancyModel
       .findOne({ _id: vacancyId, company: companyId })
@@ -482,6 +517,7 @@ export class VacancyBillingService {
       deadline,
       freeWindowEndsAt: windowEnd,
     });
+    await this.expireOtherCheckout(vacancy.checkoutSessionId, sessionId);
     return true;
   }
 
@@ -585,18 +621,10 @@ export class VacancyBillingService {
         vacancy.checkoutSessionId,
       );
     } catch (error: unknown) {
-      if (
-        error instanceof Stripe.errors.StripeError &&
-        error.code === 'resource_missing'
-      ) {
-        return undefined;
-      }
       this.logger.warn(
         `Stored checkout lookup failed: ${error instanceof Error ? error.name : 'unknown error'}`,
       );
-      throw new ServiceUnavailableException(
-        'Payment provider unavailable, try again in a moment',
-      );
+      return undefined;
     }
     if (
       session.status !== 'complete' ||
@@ -670,8 +698,13 @@ export class VacancyBillingService {
       session = await this.stripe.checkout.sessions.retrieve(sessionId);
     } catch (error: unknown) {
       this.logger.warn(
-        error instanceof Error ? error.message : 'Session lookup failed',
+        `Stored checkout lookup failed: ${error instanceof Error ? error.name : 'unknown error'}`,
       );
+      if (isTemporaryStripeError(error)) {
+        throw new ServiceUnavailableException(
+          'Payment provider unavailable, try again in a moment',
+        );
+      }
       return undefined;
     }
     if (session.status !== 'open') return undefined;
