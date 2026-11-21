@@ -183,7 +183,13 @@ export class CronService {
         this.missingOwners(this.applicationModel, 'vacancy', vacancies),
         this.missingOwners(this.bookmarkModel, 'vacancy', vacancies),
         this.missingOwners(this.invitationModel, 'vacancy', vacancies, {
-          status: InvitationStatus.INVITED,
+          $or: [
+            { status: InvitationStatus.INVITED },
+            {
+              status: InvitationStatus.ACCEPTED,
+              application: { $exists: true },
+            },
+          ],
         }),
       ]),
       this.collectMissing([

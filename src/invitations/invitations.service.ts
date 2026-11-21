@@ -609,20 +609,30 @@ export class InvitationsService {
   }
 
   async releaseForVacancy(vacancyId: string | Types.ObjectId): Promise<void> {
-    await this.invitationModel.updateMany(
-      { vacancy: vacancyId, status: InvitationStatus.INVITED },
-      { $set: { status: InvitationStatus.CANCELLED } },
-    );
+    await this.releaseMatching({ vacancy: vacancyId });
   }
 
   async releaseForVacancies(vacancyIds: string[]): Promise<void> {
     if (vacancyIds.length === 0) return;
+    await this.releaseMatching({
+      vacancy: { $in: vacancyIds.map((id) => new Types.ObjectId(id)) },
+    });
+  }
+
+  private async releaseMatching(
+    byVacancy: Record<string, unknown>,
+  ): Promise<void> {
+    await this.invitationModel.updateMany(
+      { ...byVacancy, status: InvitationStatus.INVITED },
+      { $set: { status: InvitationStatus.CANCELLED } },
+    );
     await this.invitationModel.updateMany(
       {
-        vacancy: { $in: vacancyIds.map((id) => new Types.ObjectId(id)) },
-        status: InvitationStatus.INVITED,
+        ...byVacancy,
+        status: InvitationStatus.ACCEPTED,
+        application: { $exists: true },
       },
-      { $set: { status: InvitationStatus.CANCELLED } },
+      { $unset: { application: 1 } },
     );
   }
 
