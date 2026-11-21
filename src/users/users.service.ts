@@ -157,8 +157,12 @@ export class UsersService implements EmailChangeStore {
     isPhonePublic,
   }: ContactVisibilityDto & { id: string }) {
     const changes: Partial<Pick<User, 'isEmailPublic' | 'isPhonePublic'>> = {};
-    if (isEmailPublic !== undefined) changes.isEmailPublic = isEmailPublic;
-    if (isPhonePublic !== undefined) changes.isPhonePublic = isPhonePublic;
+    if (typeof isEmailPublic === 'boolean') {
+      changes.isEmailPublic = isEmailPublic;
+    }
+    if (typeof isPhonePublic === 'boolean') {
+      changes.isPhonePublic = isPhonePublic;
+    }
     if (Object.keys(changes).length === 0) {
       throw new BadRequestException(
         'Send isEmailPublic, isPhonePublic or both',
