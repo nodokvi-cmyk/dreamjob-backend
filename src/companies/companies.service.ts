@@ -117,6 +117,12 @@ export class CompaniesService implements EmailChangeStore {
     return company;
   }
 
+  async isApproved(id: string): Promise<boolean> {
+    return (
+      (await this.companyModel.exists({ _id: id, approved: true })) !== null
+    );
+  }
+
   async getPublicProfile(id: string) {
     const company = await this.companyModel.findOne({
       _id: id,

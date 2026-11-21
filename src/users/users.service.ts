@@ -223,9 +223,7 @@ export class UsersService implements EmailChangeStore {
     if (viewer?.accountRole !== AuthRole.COMPANY) return false;
     if (!user.isProfilePublic || !user.isCvPublic) return false;
 
-    const company = await this.companiesService.findOne(viewer.accountId);
-
-    return company.approved;
+    return this.companiesService.isApproved(viewer.accountId);
   }
 
   async findAll({ page, take }: PaginationDto) {
