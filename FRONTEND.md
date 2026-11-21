@@ -2,6 +2,15 @@
 
 API contract for the GetDreamJob frontend. The backend is built in steps: build only what is listed here. When the backend adds routes, this file is updated first. Types in the frontend are hand-written from this file, not generated.
 
+**Backend status (2026-11-21): finished.** The backend is complete, reviewed three times and fully tested (521 API checks, live Stripe payments, all 11 real emails, Google sign-in by hand). This file is the final contract: build the frontend against it as it stands. Changes since 2026-11-17 that a screen may need, each described in its section below:
+- Sign-in tab from the address: company-only pages send signed-out visitors to `/sign-in?account=company&next=…` (section "Auth flow", new rule).
+- `POST /vacancies/:id/submit` and `/extend` answer HTTP **200** (they answered 201 before); branch on `status` (`done` / `paymentRequired`) as before. 409 `Payment is being processed, try again in a moment` exists on both. Pressing Submit or Extend after paying applies that payment and answers `done`; a new checkout is never opened for a payment that already went through.
+- `PATCH /users/:id/password` and `/companies/:id/password`: new 409 `Password changed, try again` (another tab changed it at the same moment), 404 when the account was deleted.
+- The password-setup lock: 403 `code: 'PASSWORD_SETUP_REQUIRED'` on every login route except `GET /auth/me` and the two password routes; the four public routes treat a locked account as signed out.
+- The profile CV upload is limited to 2 MB (413 above), like every other PDF.
+- Invitations: a company can invite one publication at most twice in total; after a decline only with a different vacancy (409 `This invitation was declined, choose a different vacancy`), a third invite is 409 `A publication can be invited at most 2 times`. Deleting a vacancy keeps its declined, cancelled and accepted invitations (`vacancy: null`, `applicationId: null`) and turns open ones `cancelled`.
+- `POST /auth/users/google` and `/auth/companies/google`: 401 `Google sign-in failed` also for a Google email over 128 characters.
+
 **Backend status (2026-11-17):** every feature is built and pushed: accounts, vacancies with the light cards, billing, applications, notifications, bookmarks, publications, invitations and the chatbot. This file was checked against the code on 2026-11-17 (routes, roles, bodies, limits, response fields, error messages). Only the "Not built yet" list at the end is missing. The frontend `CLAUDE.md` line "Not in the backend yet: applications, saved jobs, payments, chatbot" is outdated: everything is built, including the chatbot (section "Chatbot"). Build every screen this file describes that the frontend does not have yet, and update existing screens to the current response shapes (several sections below are marked as breaking changes).
 
 ## Brand
@@ -40,7 +49,7 @@ Visible occurrences found in the frontend `src/` on 2026-11-04 (change each to G
 | `POST sign-in` | `email`, `password` | `{ token }`, generic 401 on any failure |
 | `POST forgot-password` | `email` | generic message |
 | `POST reset-password` | `email`, `code`, `newPassword`, `confirmNewPassword` | `{ message }`, then sign in |
-| `POST google` | `idToken` | `{ token }` |
+| `POST google` | `idToken` | `{ token }`; 401 `Google sign-in failed` when Google rejects the token, the email is not verified by Google, or the email is longer than 128 characters |
 | `GET /auth/me` | none | the account, plus `passwordSetupRequired`; companies also `isProfileComplete` |
 
 - **Visitor IP on the two Google calls (`POST /auth/users/google`, `POST /auth/companies/google`):** these are made by the Next server, so the backend sees only the frontend's IP and all visitors would share one 20/min limit. On these two calls only, the Next server must send two extra headers: `X-Visitor-IP` (the visitor's IP, taken from the incoming request's `x-forwarded-for` first value) and `X-Frontend-Secret` (the value of the server-only env `FRONTEND_SHARED_SECRET`, never `NEXT_PUBLIC_`, never sent to the browser). The backend counts the limit per `X-Visitor-IP` only when the secret matches and the IP is valid; otherwise it uses the caller's IP, so a missing header still works but shares one limit. Every other call needs no change.
@@ -51,6 +60,7 @@ Visible occurrences found in the frontend `src/` on 2026-11-04 (change each to G
 - `PATCH /users/:id/password` and `/companies/:id/password` can also answer 409 `Password changed, try again` when the password was changed (or first set) in another tab at the same moment: show the message and reload `GET /auth/me`, since `passwordSetupRequired` may have changed. 404 means the account was deleted.
 - Copy on the sign-up "Your route" panel: the password step must say the person sets it after verifying the email, for example "Once your email is verified, you choose your password." Never imply a password is asked at sign-up, and keep the same wording on both account types.
 - Every code screen: 60 second countdown on resend (resends during the cooldown are skipped silently and still look like success), and the line "Use the newest code we sent you". Code lifetime 10 minutes, 5 wrong tries kill the code (401, request a new one).
+- **Sign-in tab from the address (added 2026-11-21).** The sign-in page picks its Job seeker / Company tab from `?account=`. When a signed-out visitor opens a **company-only** page (`/dashboard` and everything under it, `/company/…`, `/board`), send them to `/sign-in?account=company&next=<that path>`, so the Company tab is already selected; job-seeker pages keep the default tab. The backend's company emails link to `/dashboard` (company approved, approval revoked), so today a company coming from an email lands on the Job seeker tab and must switch by hand. Apply the same to every other redirect into sign-in that knows the account type (for example a company "Post a vacancy" button).
 - Resend buttons: verify email `resend-code`; reset password `forgot-password`; email change step 1 `email-change/request`; email change step 2 `email-change/resend-new`. "Forgot password" link on sign-in and profile.
 - Google users: no `birthDate`, `lastName` may be empty, `age` may be missing. A new Google company has empty `companyName` and `description`: show "Complete your company profile" while `isProfileComplete` is false, saved with `PATCH /companies/:id`.
 
