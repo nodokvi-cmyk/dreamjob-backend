@@ -3,6 +3,8 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -108,6 +110,7 @@ export class VacanciesController {
   }
 
   @Post(':id/submit')
+  @HttpCode(HttpStatus.OK)
   @UseGuards(IsAuthGuard, RolesGuard)
   @Roles(AuthRole.COMPANY)
   @Throttle(strictThrottle)
@@ -116,6 +119,7 @@ export class VacanciesController {
   }
 
   @Post(':id/extend')
+  @HttpCode(HttpStatus.OK)
   @UseGuards(IsAuthGuard, RolesGuard)
   @Roles(AuthRole.COMPANY)
   @Throttle(strictThrottle)
