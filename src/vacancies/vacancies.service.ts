@@ -31,6 +31,7 @@ import {
   VacancyBillingResult,
   VacancyBillingService,
 } from '../payment/vacancy-billing.service.js';
+import { sameList } from '../shared/compare/same-list.js';
 import {
   exactPattern,
   searchWords,
@@ -395,22 +396,41 @@ export class VacanciesService {
     const changes: VacancyChanges = {};
     const unsets: SalaryUnsets = {};
 
-    if (title) changes.title = title;
-    if (description) changes.description = description;
-    if (category) changes.category = category;
-    if (employmentType) changes.employmentType = employmentType;
-    if (workMode) changes.workMode = workMode;
-    if (typeof location === 'string') changes.location = location;
-    if (typeof salaryMin === 'number') changes.salaryMin = salaryMin;
-    if (salaryMin === null) unsets.salaryMin = 1;
-    if (typeof salaryMax === 'number') changes.salaryMax = salaryMax;
-    if (salaryMax === null) unsets.salaryMax = 1;
-    if (currency) changes.currency = currency;
-    if (requirements) changes.requirements = requirements;
+    if (title && title !== vacancy.title) changes.title = title;
+    if (description && description !== vacancy.description) {
+      changes.description = description;
+    }
+    if (category && category !== vacancy.category) changes.category = category;
+    if (employmentType && employmentType !== vacancy.employmentType) {
+      changes.employmentType = employmentType;
+    }
+    if (workMode && workMode !== vacancy.workMode) changes.workMode = workMode;
+    if (typeof location === 'string' && location !== vacancy.location) {
+      changes.location = location;
+    }
+    if (typeof salaryMin === 'number' && salaryMin !== vacancy.salaryMin) {
+      changes.salaryMin = salaryMin;
+    }
+    if (salaryMin === null && vacancy.salaryMin !== undefined) {
+      unsets.salaryMin = 1;
+    }
+    if (typeof salaryMax === 'number' && salaryMax !== vacancy.salaryMax) {
+      changes.salaryMax = salaryMax;
+    }
+    if (salaryMax === null && vacancy.salaryMax !== undefined) {
+      unsets.salaryMax = 1;
+    }
+    if (currency && currency !== vacancy.currency) changes.currency = currency;
+    if (requirements && !sameList(requirements, vacancy.requirements)) {
+      changes.requirements = requirements;
+    }
 
     const isContentChange =
       Object.keys(changes).length > 0 || Object.keys(unsets).length > 0;
-    if (deadline) {
+    const isDeadlineChange =
+      deadline !== undefined &&
+      deadline.getTime() !== vacancy.deadline.getTime();
+    if (deadline && isDeadlineChange) {
       if (
         vacancy.firstPublishedAt &&
         deadline.getTime() > vacancy.deadline.getTime()
@@ -429,7 +449,9 @@ export class VacanciesService {
       }
       changes.deadline = deadline;
     }
-    if (!isContentChange && !deadline) return this.toResponse(vacancy, true);
+    if (!isContentChange && !isDeadlineChange) {
+      return this.toResponse(vacancy, true);
+    }
 
     this.assertConsistent({
       workMode: changes.workMode ?? vacancy.workMode,

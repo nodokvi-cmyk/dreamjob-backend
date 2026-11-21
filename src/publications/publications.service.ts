@@ -13,6 +13,7 @@ import { StoragePrefix } from '../aws-s3/storage-prefix.js';
 import { Company } from '../companies/schema/company.schema.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { NotificationType } from '../notifications/schema/notification.schema.js';
+import { sameList } from '../shared/compare/same-list.js';
 import {
   exactPattern,
   searchWords,
@@ -400,22 +401,50 @@ export class PublicationsService {
     const changes: PublicationChanges = {};
     const unsets: PublicationUnsets = {};
 
-    if (title) changes.title = title;
-    if (about) changes.about = about;
-    if (category) changes.category = category;
-    if (employmentTypes) changes.employmentTypes = employmentTypes;
-    if (workModes) changes.workModes = workModes;
-    if (locations) changes.locations = locations;
-    if (typeof salaryMin === 'number') changes.salaryMin = salaryMin;
-    if (salaryMin === null) unsets.salaryMin = 1;
-    if (typeof salaryMax === 'number') changes.salaryMax = salaryMax;
-    if (salaryMax === null) unsets.salaryMax = 1;
-    if (currency) changes.currency = currency;
-    if (skills) changes.skills = skills;
-    if (typeof experienceYears === 'number') {
+    if (title && title !== publication.title) changes.title = title;
+    if (about && about !== publication.about) changes.about = about;
+    if (category && category !== publication.category) {
+      changes.category = category;
+    }
+    if (
+      employmentTypes &&
+      !sameList(employmentTypes, publication.employmentTypes)
+    ) {
+      changes.employmentTypes = employmentTypes;
+    }
+    if (workModes && !sameList(workModes, publication.workModes)) {
+      changes.workModes = workModes;
+    }
+    if (locations && !sameList(locations, publication.locations)) {
+      changes.locations = locations;
+    }
+    if (typeof salaryMin === 'number' && salaryMin !== publication.salaryMin) {
+      changes.salaryMin = salaryMin;
+    }
+    if (salaryMin === null && publication.salaryMin !== undefined) {
+      unsets.salaryMin = 1;
+    }
+    if (typeof salaryMax === 'number' && salaryMax !== publication.salaryMax) {
+      changes.salaryMax = salaryMax;
+    }
+    if (salaryMax === null && publication.salaryMax !== undefined) {
+      unsets.salaryMax = 1;
+    }
+    if (currency && currency !== publication.currency) {
+      changes.currency = currency;
+    }
+    if (skills && !sameList(skills, publication.skills)) {
+      changes.skills = skills;
+    }
+    if (
+      typeof experienceYears === 'number' &&
+      experienceYears !== publication.experienceYears
+    ) {
       changes.experienceYears = experienceYears;
     }
-    if (experienceYears === null) unsets.experienceYears = 1;
+    if (experienceYears === null && publication.experienceYears !== undefined) {
+      unsets.experienceYears = 1;
+    }
 
     if (Object.keys(changes).length === 0 && Object.keys(unsets).length === 0) {
       return this.toResponse(publication, true);

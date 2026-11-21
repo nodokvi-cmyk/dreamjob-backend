@@ -4,7 +4,7 @@ API contract for the GetDreamJob frontend. The backend is built in steps: build 
 
 **Backend status (2026-11-21): finished.** The backend is complete, reviewed three times and fully tested (521 API checks, live Stripe payments, all 11 real emails, Google sign-in by hand). This file is the final contract: build the frontend against it as it stands. Changes since 2026-11-17 that a screen may need, each described in its section below:
 - Sign-in tab from the address: company-only pages send signed-out visitors to `/sign-in?account=company&next=…` (section "Auth flow", new rule).
-- `POST /vacancies/:id/submit` and `/extend` answer HTTP **200** (they answered 201 before); branch on `status` (`done` / `paymentRequired`) as before. 409 `Payment is being processed, try again in a moment` exists on both. Pressing Submit or Extend after paying applies that payment and answers `done`; a new checkout is never opened for a payment that already went through; if Stripe cannot be reached to check it, both answer 503 `Payment provider unavailable, try again in a moment`.
+- `POST /vacancies/:id/submit` and `/extend` answer HTTP **200** (they answered 201 before); branch on `status` (`done` / `paymentRequired`) as before. 409 `Payment is being processed, try again in a moment` exists on both. Pressing Submit or Extend after paying applies that payment and answers `done`; a new checkout is never opened for a payment that already went through; a credit is spent first when one is available, so the 503 `Payment provider unavailable, try again in a moment` comes only when a new checkout would be needed and Stripe cannot be reached to check the stored one.
 - `PATCH /users/:id/password` and `/companies/:id/password`: new 409 `Password changed, try again` (another tab changed it at the same moment), 404 when the account was deleted.
 - The password-setup lock: 403 `code: 'PASSWORD_SETUP_REQUIRED'` on every login route except `GET /auth/me` and the two password routes; the four public routes treat a locked account as signed out.
 - The profile CV upload is limited to 2 MB (413 above), like every other PDF.
@@ -165,7 +165,7 @@ Per list:
   - `{ status: 'done', vacancy }`: finished. For submit the vacancy is now `pending`.
   - `{ status: 'paymentRequired', checkoutUrl }`: send the browser to `checkoutUrl` (`window.location.assign`). Pressing Submit again while a payment is open returns the same link.
   - 409 `Payment is being processed, try again in a moment` (submit and extend): the vacancy's checkout was just paid and Stripe's confirmation is still being applied. Show the message and reload the vacancy after a second or two; never treat it as unpaid. Pressing Submit or Extend after paying applies that payment and returns `done` instead of a new link.
-  - 503 `Payment provider unavailable, try again in a moment` (submit and extend): Stripe could not be reached to check the vacancy's stored checkout, so the backend refuses to open a new one (that could charge twice). Show the message with a retry button; nothing changed.
+  - 503 `Payment provider unavailable, try again in a moment` (submit and extend): only when no credit covers the action and Stripe could not be reached to check the vacancy's stored checkout, so the backend refuses to open a new one (that could charge twice). Free actions and credit spends never get it. Show the message with a retry button; nothing changed.
 - After a payment the person comes back to `/company/vacancies?payment=success&session_id=cs_...` (or `?payment=cancelled`). On success call `GET /payment/confirm?sessionId=<session_id>` (see Billing), then reload the list.
 - Warn near the Submit button and before the Stripe redirect: credits and payments are not refunded in cash.
 
@@ -175,7 +175,7 @@ Per list:
 - Rejecting a vacancy that was **never published** returns the credit that paid for it (a plan credit goes back to `credits` up to the plan limit, a purchased one or a paid vacancy goes to `purchasedCredits`). Editing it afterwards makes it `notSubmitted` again: the company must press Submit again and pay again. Tell the company this on the rejected screen.
 - Rejecting a vacancy that was **published before** gives no refund. Editing it sends it back to `pending` for free, no new Submit.
 - Deleting a `notSubmitted` vacancy is free. Deleting a `pending` never-published vacancy returns its credit. Deleting any other vacancy returns nothing. An admin delete never returns a credit.
-- Editing content on a `published` or `rejected` vacancy (any field except `deadline`, or adding a photo) sends it back to `pending`. Removing a photo sends only a `rejected` vacancy back. A change of the deadline alone never changes the status.
+- Editing content on a `published` or `rejected` vacancy (any field except `deadline`, or adding a photo) sends it back to `pending`. Only a value that differs from the stored one counts: a save that sends the same values changes nothing (status and `updatedAt` stay) and answers the vacancy as it is, so the edit form may send the whole form. Removing a photo sends only a `rejected` vacancy back. A change of the deadline alone never changes the status.
 
 ### The 60-day window, deadline and extension
 
@@ -473,7 +473,7 @@ Only role `user` creates and manages publications; admins review them. Approved 
 **Item:** `{ id, user, title, about, category, employmentTypes, workModes, locations, salaryMin, salaryMax, currency, skills, experienceYears, acceptingInvites, hasCv, hasCoverLetter, status, expiresAt, createdAt, rejectionReason, timerPaused, updatedAt }`. `salaryMin`, `salaryMax`, `experienceYears` and `expiresAt` are `null` when not set; `rejectionReason` is `''` when none.
 
 **Status:** `pending` (waiting for admin review), `published`, `rejected` (show `rejectionReason` when not empty), `closed` (final), `expired` (its 60 days ran out). There is no draft and no submit step: a new publication goes straight to `pending`.
-- Editing a `published` or `rejected` publication, or uploading a CV or cover letter, sends it back to `pending` for a new review. Removing a file sends only a `rejected` one back. Show a short note before saving: "Changes need a new admin review; meanwhile companies cannot see this publication".
+- Editing a `published` or `rejected` publication, or uploading a CV or cover letter, sends it back to `pending` for a new review. Only a value that differs from the stored one counts: a save with identical values changes nothing and answers the publication as it is. Removing a file sends only a `rejected` one back. Show a short note before saving: "Changes need a new admin review; meanwhile companies cannot see this publication".
 - On a `rejected` publication, tell the user to edit and resend it, or delete it to free a slot.
 - `closed` and `expired` publications cannot be edited (400). Expired ones must be extended first.
 
