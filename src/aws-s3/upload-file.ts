@@ -17,21 +17,21 @@ export const optionalUploadFilesPipe = new ParseFilePipe({
 
 export const uploadLimits = { fileSize: MAX_UPLOAD_BYTES, files: 1 };
 
-export const MAX_APPLICATION_FILE_BYTES = 2 * 1024 * 1024;
+export const MAX_PDF_BYTES = 2 * 1024 * 1024;
 
 export const applicationUploadLimits = {
-  fileSize: MAX_APPLICATION_FILE_BYTES,
+  fileSize: MAX_PDF_BYTES,
   files: 2,
 };
 
-export const publicationFileLimits = {
-  fileSize: MAX_APPLICATION_FILE_BYTES,
+export const pdfFileLimits = {
+  fileSize: MAX_PDF_BYTES,
   files: 1,
 };
 
-export const publicationFilePipe = new ParseFilePipe({
+export const pdfFilePipe = new ParseFilePipe({
   validators: [
-    new MaxFileSizeValidator({ maxSize: MAX_APPLICATION_FILE_BYTES }),
+    new MaxFileSizeValidator({ maxSize: MAX_PDF_BYTES }),
   ],
 });
 

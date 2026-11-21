@@ -12,7 +12,12 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { uploadFilePipe, uploadLimits } from '../aws-s3/upload-file.js';
+import {
+  pdfFileLimits,
+  pdfFilePipe,
+  uploadFilePipe,
+  uploadLimits,
+} from '../aws-s3/upload-file.js';
 import { IsAuthGuard } from '../guards/is-auth.guard.js';
 import { AllowPasswordSetup } from '../shared/decorators/allow-password-setup.decorator.js';
 import { RolesGuard } from '../guards/roles.guard.js';
@@ -123,12 +128,12 @@ export class UsersController {
   @Patch(':id/cv')
   @UseGuards(IsAuthGuard, RolesGuard)
   @Throttle(uploadThrottle)
-  @UseInterceptors(FileInterceptor('cv', { limits: uploadLimits }))
+  @UseInterceptors(FileInterceptor('cv', { limits: pdfFileLimits }))
   setCv(
     @Param() { id }: IsValidMongoIdDto,
     @AccountId() accountId: string,
     @AccountRole() accountRole: AuthRole,
-    @UploadedFile(uploadFilePipe) file: Express.Multer.File,
+    @UploadedFile(pdfFilePipe) file: Express.Multer.File,
   ) {
     this.assertSelf(id, accountId, accountRole);
     return this.usersService.setCv(id, file);

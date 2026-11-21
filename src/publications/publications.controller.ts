@@ -13,8 +13,8 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
-  publicationFileLimits,
-  publicationFilePipe,
+  pdfFileLimits,
+  pdfFilePipe,
 } from '../aws-s3/upload-file.js';
 import { IsAuthGuard } from '../guards/is-auth.guard.js';
 import { RolesGuard } from '../guards/roles.guard.js';
@@ -36,9 +36,9 @@ import { RejectPublicationDto } from './dto/reject-publication.dto.js';
 import { UpdatePublicationDto } from './dto/update-publication.dto.js';
 import { PublicationsService } from './publications.service.js';
 
-const cvInterceptor = FileInterceptor('cv', { limits: publicationFileLimits });
+const cvInterceptor = FileInterceptor('cv', { limits: pdfFileLimits });
 const coverLetterInterceptor = FileInterceptor('coverLetter', {
-  limits: publicationFileLimits,
+  limits: pdfFileLimits,
 });
 
 @Controller('publications')
@@ -181,7 +181,7 @@ export class PublicationsController {
   setCv(
     @Param() { id }: IsValidMongoIdDto,
     @AccountId() accountId: string,
-    @UploadedFile(publicationFilePipe) file: Express.Multer.File,
+    @UploadedFile(pdfFilePipe) file: Express.Multer.File,
   ) {
     return this.publicationsService.setFile(id, accountId, 'cvKey', file);
   }
@@ -194,7 +194,7 @@ export class PublicationsController {
   setCoverLetter(
     @Param() { id }: IsValidMongoIdDto,
     @AccountId() accountId: string,
-    @UploadedFile(publicationFilePipe) file: Express.Multer.File,
+    @UploadedFile(pdfFilePipe) file: Express.Multer.File,
   ) {
     return this.publicationsService.setFile(
       id,
