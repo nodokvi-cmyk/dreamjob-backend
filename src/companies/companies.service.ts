@@ -403,6 +403,9 @@ export class CompaniesService implements EmailChangeStore {
 
   async approve(id: string): Promise<CompanyDocument> {
     const existing = await this.findOne(id);
+    if (!existing.isVerified) {
+      throw new BadRequestException('Company email is not verified');
+    }
     if (!existing.isProfileComplete) {
       throw new BadRequestException(
         'Company profile is incomplete: companyName, description and a plan are required',
