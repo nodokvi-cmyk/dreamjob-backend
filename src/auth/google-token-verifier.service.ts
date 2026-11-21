@@ -10,6 +10,11 @@ export interface GoogleIdentity {
 }
 
 const NAME_MAX_LENGTH = 64;
+const EMAIL_MAX_LENGTH = 128;
+
+function firstFilled(...values: (string | undefined)[]): string | undefined {
+  return values.map((value) => value?.trim()).find((value) => value);
+}
 
 @Injectable()
 export class GoogleTokenVerifier {
@@ -27,18 +32,23 @@ export class GoogleTokenVerifier {
       .catch(() => null);
     const payload = ticket?.getPayload();
 
-    if (!payload?.email || !payload.email_verified) {
+    if (
+      !payload?.email ||
+      !payload.email_verified ||
+      payload.email.length > EMAIL_MAX_LENGTH
+    ) {
       throw new UnauthorizedException('Google sign-in failed');
     }
 
     const email = payload.email.toLowerCase();
-    const firstName = payload.given_name ?? payload.name ?? email.split('@')[0];
+    const firstName =
+      firstFilled(payload.given_name, payload.name) ?? email.split('@')[0];
 
     return {
       googleId: payload.sub,
       email,
       firstName: firstName.slice(0, NAME_MAX_LENGTH),
-      lastName: (payload.family_name ?? '').slice(0, NAME_MAX_LENGTH),
+      lastName: (payload.family_name ?? '').trim().slice(0, NAME_MAX_LENGTH),
     };
   }
 }
