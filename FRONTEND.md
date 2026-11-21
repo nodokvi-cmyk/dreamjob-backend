@@ -4,7 +4,7 @@ API contract for the GetDreamJob frontend. The backend is built in steps: build 
 
 **Backend status (2026-11-21): finished.** The backend is complete, reviewed three times and fully tested (521 API checks, live Stripe payments, all 11 real emails, Google sign-in by hand). This file is the final contract: build the frontend against it as it stands. Changes since 2026-11-17 that a screen may need, each described in its section below:
 - Sign-in tab from the address: company-only pages send signed-out visitors to `/sign-in?account=company&next=…` (section "Auth flow", new rule).
-- `POST /vacancies/:id/submit` and `/extend` answer HTTP **200** (they answered 201 before); branch on `status` (`done` / `paymentRequired`) as before. 409 `Payment is being processed, try again in a moment` exists on both. Pressing Submit or Extend after paying applies that payment and answers `done`; a new checkout is never opened for a payment that already went through.
+- `POST /vacancies/:id/submit` and `/extend` answer HTTP **200** (they answered 201 before); branch on `status` (`done` / `paymentRequired`) as before. 409 `Payment is being processed, try again in a moment` exists on both. Pressing Submit or Extend after paying applies that payment and answers `done`; a new checkout is never opened for a payment that already went through; if Stripe cannot be reached to check it, both answer 503 `Payment provider unavailable, try again in a moment`.
 - `PATCH /users/:id/password` and `/companies/:id/password`: new 409 `Password changed, try again` (another tab changed it at the same moment), 404 when the account was deleted.
 - The password-setup lock: 403 `code: 'PASSWORD_SETUP_REQUIRED'` on every login route except `GET /auth/me` and the two password routes; the four public routes treat a locked account as signed out.
 - The profile CV upload is limited to 2 MB (413 above), like every other PDF.
@@ -164,6 +164,7 @@ Per list:
   - `{ status: 'done', vacancy }`: finished. For submit the vacancy is now `pending`.
   - `{ status: 'paymentRequired', checkoutUrl }`: send the browser to `checkoutUrl` (`window.location.assign`). Pressing Submit again while a payment is open returns the same link.
   - 409 `Payment is being processed, try again in a moment` (submit and extend): the vacancy's checkout was just paid and Stripe's confirmation is still being applied. Show the message and reload the vacancy after a second or two; never treat it as unpaid. Pressing Submit or Extend after paying applies that payment and returns `done` instead of a new link.
+  - 503 `Payment provider unavailable, try again in a moment` (submit and extend): Stripe could not be reached to check the vacancy's stored checkout, so the backend refuses to open a new one (that could charge twice). Show the message with a retry button; nothing changed.
 - After a payment the person comes back to `/company/vacancies?payment=success&session_id=cs_...` (or `?payment=cancelled`). On success call `GET /payment/confirm?sessionId=<session_id>` (see Billing), then reload the list.
 - Warn near the Submit button and before the Stripe redirect: credits and payments are not refunded in cash.
 

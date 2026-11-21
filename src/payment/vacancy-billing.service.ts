@@ -6,6 +6,7 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
@@ -584,10 +585,18 @@ export class VacancyBillingService {
         vacancy.checkoutSessionId,
       );
     } catch (error: unknown) {
+      if (
+        error instanceof Stripe.errors.StripeError &&
+        error.code === 'resource_missing'
+      ) {
+        return undefined;
+      }
       this.logger.warn(
-        error instanceof Error ? error.message : 'Session lookup failed',
+        `Stored checkout lookup failed: ${error instanceof Error ? error.name : 'unknown error'}`,
       );
-      return undefined;
+      throw new ServiceUnavailableException(
+        'Payment provider unavailable, try again in a moment',
+      );
     }
     if (
       session.status !== 'complete' ||
