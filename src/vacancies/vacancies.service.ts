@@ -270,7 +270,7 @@ export class VacanciesService {
         location: location ?? '',
         salaryMin: salaryMin ?? undefined,
         salaryMax: salaryMax ?? undefined,
-        currency,
+        currency: currency ?? undefined,
         requirements: requirements ?? [],
         deadline,
         photoKeys,

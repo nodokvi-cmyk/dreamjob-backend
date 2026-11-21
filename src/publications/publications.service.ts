@@ -274,7 +274,7 @@ export class PublicationsService {
       locations: locations ?? [],
       salaryMin: salaryMin ?? undefined,
       salaryMax: salaryMax ?? undefined,
-      currency,
+      currency: currency ?? undefined,
       skills: skills ?? [],
       experienceYears: experienceYears ?? undefined,
     });
