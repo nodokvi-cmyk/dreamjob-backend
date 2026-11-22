@@ -13,6 +13,8 @@ import {
   Invitation,
   InvitationStatus,
 } from '../invitations/schema/invitation.schema.js';
+import { RatingsService } from '../ratings/ratings.service.js';
+import { Rating } from '../ratings/schema/rating.schema.js';
 import { Notification } from '../notifications/schema/notification.schema.js';
 import { Publication } from '../publications/schema/publication.schema.js';
 import { AuthRole } from '../shared/types/auth-role.js';
@@ -28,6 +30,7 @@ export interface RepairResult {
   companies: number;
   vacancies: number;
   publications: number;
+  ratings: number;
   failed: number;
 }
 
@@ -58,11 +61,13 @@ export class CronService {
     @InjectModel(Vacancy.name) private readonly vacancyModel: Model<Vacancy>,
     @InjectModel(Invitation.name)
     private readonly invitationModel: Model<Invitation>,
+    @InjectModel(Rating.name) private readonly ratingModel: Model<Rating>,
     private readonly usersService: UsersService,
     private readonly companiesService: CompaniesService,
     private readonly applicationsService: ApplicationsService,
     private readonly bookmarksService: BookmarksService,
     private readonly invitationsService: InvitationsService,
+    private readonly ratingsService: RatingsService,
   ) {}
 
   async cleanup(): Promise<CleanupResult> {
@@ -133,6 +138,7 @@ export class CronService {
         this.missingOwners(this.publicationModel, 'user', users),
         this.missingOwners(this.bookmarkModel, 'user', users),
         this.missingOwners(this.applicationModel, 'user', users),
+        this.missingOwners(this.ratingModel, 'user', users),
         this.missingOwners(this.notificationModel, 'recipient', users, {
           recipientRole: AuthRole.USER,
         }),
@@ -140,6 +146,7 @@ export class CronService {
       this.collectMissing([
         this.missingOwners(this.vacancyModel, 'company', companies),
         this.missingOwners(this.invitationModel, 'company', companies),
+        this.missingOwners(this.ratingModel, 'company', companies),
         this.missingOwners(this.notificationModel, 'recipient', companies, {
           recipientRole: AuthRole.COMPANY,
         }),
@@ -151,6 +158,7 @@ export class CronService {
       companies: 0,
       vacancies: 0,
       publications: 0,
+      ratings: 0,
       failed: 0,
     };
 
@@ -170,6 +178,16 @@ export class CronService {
     }
 
     await this.repairChildren(result);
+
+    try {
+      result.ratings = await this.ratingsService.repairCounts();
+    } catch (error: unknown) {
+      this.logger.error(
+        'Rating count repair failed',
+        error instanceof Error ? error.stack : String(error),
+      );
+      result.failed += 1;
+    }
 
     return result;
   }

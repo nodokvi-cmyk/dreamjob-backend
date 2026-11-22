@@ -31,6 +31,8 @@ import {
   publicationSchema,
 } from '../publications/schema/publication.schema.js';
 import { User, userSchema } from '../users/schema/user.schema.js';
+import { Rating, ratingSchema } from '../ratings/schema/rating.schema.js';
+import { RatingsModule } from '../ratings/ratings.module.js';
 import { UsersModule } from '../users/users.module.js';
 import { Vacancy, vacancySchema } from '../vacancies/schema/vacancy.schema.js';
 import { CronController } from './cron.controller.js';
@@ -46,6 +48,7 @@ import { S3SweepService } from './s3-sweep.service.js';
     ApplicationsModule,
     BookmarksModule,
     InvitationsModule,
+    RatingsModule,
     MongooseModule.forFeature([
       { name: User.name, schema: userSchema },
       { name: Company.name, schema: companySchema },
@@ -56,6 +59,7 @@ import { S3SweepService } from './s3-sweep.service.js';
       { name: Bookmark.name, schema: bookmarkSchema },
       { name: Notification.name, schema: notificationSchema },
       { name: Invitation.name, schema: invitationSchema },
+      { name: Rating.name, schema: ratingSchema },
     ]),
   ],
   controllers: [CronController],
