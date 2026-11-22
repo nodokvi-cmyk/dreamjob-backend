@@ -10,6 +10,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, QueryFilter, Types } from 'mongoose';
 import { assertPdf, PDF_CONTENT_TYPE } from '../aws-s3/assert-pdf.js';
+import type { ApplicantCounts } from './applicant-counts.js';
 import { AwsS3Service } from '../aws-s3/aws-s3.service.js';
 import { StoragePrefix } from '../aws-s3/storage-prefix.js';
 import type { ApplicationFiles } from '../aws-s3/upload-file.js';
@@ -467,6 +468,45 @@ export class ApplicationsService {
       page,
       take,
     };
+  }
+
+  async applicantCounts(
+    vacancyIds: readonly Types.ObjectId[],
+  ): Promise<Map<string, ApplicantCounts>> {
+    if (vacancyIds.length === 0) return new Map();
+
+    const rows = await this.applicationModel.aggregate<
+      { _id: Types.ObjectId } & ApplicantCounts
+    >([
+      {
+        $match: {
+          vacancy: { $in: [...vacancyIds] },
+          status: { $ne: ApplicationStatus.WITHDRAWN },
+          user: { $type: 'objectId' },
+        },
+      },
+      {
+        $group: {
+          _id: '$vacancy',
+          applicantCount: { $sum: 1 },
+          newApplicants: {
+            $sum: {
+              $cond: [{ $eq: ['$status', ApplicationStatus.SUBMITTED] }, 1, 0],
+            },
+          },
+        },
+      },
+    ]);
+
+    return new Map(
+      rows.map((row) => [
+        row._id.toString(),
+        {
+          applicantCount: row.applicantCount,
+          newApplicants: row.newApplicants,
+        },
+      ]),
+    );
   }
 
   async myApplicationsFor(

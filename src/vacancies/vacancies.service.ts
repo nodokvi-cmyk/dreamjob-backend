@@ -10,6 +10,7 @@ import {
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Model, QueryFilter, Types, UpdateQuery } from 'mongoose';
 import type { ClientSession, Connection } from 'mongoose';
+import { NO_APPLICANTS } from '../applications/applicant-counts.js';
 import { ApplicationsService } from '../applications/applications.service.js';
 import { AwsS3Service } from '../aws-s3/aws-s3.service.js';
 import {
@@ -356,11 +357,15 @@ export class VacanciesService {
     );
 
     const { items, total } = await this.findPageAndCount(filter, query);
+    const counts = await this.applications.applicantCounts(
+      items.map(({ _id }) => _id),
+    );
 
     return {
       items: items.map((vacancy) => ({
         ...this.privateCard(vacancy),
         photos: this.photosOf(vacancy),
+        ...(counts.get(vacancy._id.toString()) ?? NO_APPLICANTS),
       })),
       total,
       page: query.page,
@@ -402,11 +407,20 @@ export class VacanciesService {
     if (!vacancy) throw new NotFoundException('Vacancy not found');
 
     const context = await this.userContext([vacancy], viewer);
+    const isOwner =
+      viewer?.accountRole === AuthRole.COMPANY &&
+      viewer.accountId === vacancy.company.toString();
+    const counts = isOwner
+      ? ((await this.applications.applicantCounts([vacancy._id])).get(
+          vacancy._id.toString(),
+        ) ?? NO_APPLICANTS)
+      : {};
 
     return {
       ...this.toResponse(vacancy, this.canSeePrivate(vacancy, viewer)),
       ...companyFieldsOf(vacancy.company, context.companies),
       ...cardMarks(vacancy, context),
+      ...counts,
     };
   }
 
