@@ -278,7 +278,6 @@ export class CompaniesService implements EmailChangeStore {
               ratingTier: -1,
               ratingAverage: -1,
               ratingCount: -1,
-              companyName: 1,
               _id: 1,
             },
           },
