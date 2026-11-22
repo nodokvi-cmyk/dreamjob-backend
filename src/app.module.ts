@@ -7,6 +7,7 @@ import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { ApplicationsModule } from './applications/applications.module.js';
 import { AuthModule } from './auth/auth.module.js';
+import { RatingsModule } from './ratings/ratings.module.js';
 import { BookmarksModule } from './bookmarks/bookmarks.module.js';
 import { ChatModule } from './chat/chat.module.js';
 import { CronModule } from './cron/cron.module.js';
@@ -46,6 +47,7 @@ import { VacanciesModule } from './vacancies/vacancies.module.js';
     VacanciesModule,
     ApplicationsModule,
     BookmarksModule,
+    RatingsModule,
     AuthModule,
     EmailChangeModule,
     PaymentModule,
