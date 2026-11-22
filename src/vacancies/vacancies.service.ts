@@ -306,13 +306,27 @@ export class VacanciesService {
 
   async listPublic(query: PublicVacanciesFilterDto, viewer: Viewer | null) {
     const now = new Date();
+    const isPast = query.period === 'past';
+    if (isPast && !query.companyId) {
+      throw new BadRequestException('Past vacancies need a companyId');
+    }
+
     const filter = allOf(
-      { status: VacancyStatus.PUBLISHED, deadline: { $gt: now } },
+      isPast
+        ? {
+            $or: [
+              { status: VacancyStatus.PUBLISHED, deadline: { $lte: now } },
+              { status: VacancyStatus.CLOSED },
+            ],
+          }
+        : { status: VacancyStatus.PUBLISHED, deadline: { $gt: now } },
       query.companyId ? { company: new Types.ObjectId(query.companyId) } : {},
       this.buildFilter(query),
     );
 
-    const { items, total } = await this.findPageAndCount(filter, query);
+    const sorting =
+      isPast && !query.sort ? { ...query, sort: '-deadline' as const } : query;
+    const { items, total } = await this.findPageAndCount(filter, sorting);
     const context = await this.userContext(items, viewer);
 
     return {

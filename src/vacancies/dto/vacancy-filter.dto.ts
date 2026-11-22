@@ -85,11 +85,20 @@ export class VacancyFilterDto extends PaginationDto {
   sort?: VacancySort;
 }
 
+export const VACANCY_PERIODS = ['open', 'past'] as const;
+
+export type VacancyPeriod = (typeof VACANCY_PERIODS)[number];
+
 export class PublicVacanciesFilterDto extends VacancyFilterDto {
   @IsOptional()
   @Transform(emptyToUndefined)
   @IsMongoId()
   companyId?: string;
+
+  @IsOptional()
+  @Transform(emptyToUndefined)
+  @IsIn(VACANCY_PERIODS)
+  period?: VacancyPeriod;
 }
 
 export class OwnVacanciesFilterDto extends VacancyFilterDto {
