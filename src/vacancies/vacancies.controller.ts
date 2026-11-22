@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
@@ -60,6 +61,15 @@ export class VacanciesController {
     @OptionalViewer() viewer: Viewer | null,
   ) {
     return this.vacanciesService.listPublic(query, viewer);
+  }
+
+  @Get('latest')
+  @Header(
+    'Cache-Control',
+    'public, max-age=0, s-maxage=60, stale-while-revalidate=300',
+  )
+  findLatest() {
+    return this.vacanciesService.listLatest();
   }
 
   @Get('mine')

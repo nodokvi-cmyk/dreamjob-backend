@@ -118,6 +118,7 @@ const RESUBMIT_STATUSES: readonly VacancyStatus[] = [
   VacancyStatus.REJECTED,
 ];
 const MAX_SEARCH_WORDS = 5;
+const LATEST_VACANCIES = 5;
 const PHOTO_KEY_PREFIX = `${StoragePrefix.VACANCY_PHOTOS}/`;
 
 const SORTS: Record<
@@ -320,6 +321,17 @@ export class VacanciesService {
       page: query.page,
       take: query.take,
     };
+  }
+
+  async listLatest() {
+    const items = await this.vacancyModel
+      .find({ status: VacancyStatus.PUBLISHED, deadline: { $gt: new Date() } })
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(LATEST_VACANCIES)
+      .lean<VacancyRecord[]>();
+    const context = await this.userContext(items, null);
+
+    return { items: items.map((vacancy) => userVacancyCard(vacancy, context)) };
   }
 
   async listOwn(companyId: string, query: OwnVacanciesFilterDto) {

@@ -4,6 +4,7 @@ API contract for the GetDreamJob frontend. The backend is built in steps: build 
 
 **Backend status (2026-11-21): finished.** The backend is complete, reviewed many times (every finding fixed or decided) and fully tested (528 API checks, 20 unit tests, live Stripe payments, all 11 real emails, Google sign-in by hand). This file is the final contract: build the frontend against it as it stands. Changes since 2026-11-17 that a screen may need, each described in its section below:
 - **Companies page (2026-11-22).** New public `GET /companies/public` (list of approved companies with search, `openVacancies`, paging; section "Public company list"): replace the "For companies" nav page with a "Companies" page next to Vacancies. `GET /companies/:id/profile` now carries `openVacancies`. `GET /vacancies` takes an optional `companyId` (company page preview of 3 latest plus a "See all vacancies" link with a company chip).
+- **Home page latest vacancies (2026-11-22).** New public `GET /vacancies/latest`: no query, no token, no paging. Answers `{ items }` with the 5 newest published, non-expired vacancies as the same light cards as `GET /vacancies`, but anonymous for everyone (`myApplication` always `null`, `isBookmarked` always `false`, so never use it where those matter). No `total`, so it is cheaper than `GET /vacancies?take=5`. The response is cached on Vercel's edge for 60 seconds (`s-maxage=60`, plus 5 minutes of stale-while-revalidate), the same for every visitor, so a newly approved vacancy can take up to a minute to show on the home page.
 - Sign-in tab from the address: company-only pages send signed-out visitors to `/sign-in?account=company&next=…` (section "Auth flow", new rule).
 - `POST /vacancies/:id/submit` and `/extend` answer HTTP **200** (they answered 201 before); branch on `status` (`done` / `paymentRequired`) as before. 409 `Payment is being processed, try again in a moment` exists on both. Pressing Submit or Extend after paying applies that payment and answers `done`; a new checkout is never opened for a payment that already went through; a credit is spent first when one is available, so the 503 `Payment provider unavailable, try again in a moment` comes only when a new checkout would be needed and Stripe cannot be reached to check the stored one.
 - `PATCH /users/:id/password` and `/companies/:id/password`: new 409 `Password changed, try again` (another tab changed it at the same moment), 404 when the account was deleted.
@@ -149,6 +150,7 @@ Per list:
 | Route | Who |
 | --- | --- |
 | `GET /vacancies` | public, published and not expired |
+| `GET /vacancies/latest` | public, anonymous cards, 5 newest published and not expired, edge cached 60 s |
 | `GET /vacancies/:id` | public sees `published` and `closed`; the owner sees all; an admin sees every submitted vacancy (a `notSubmitted` one gives 404) |
 | `GET /vacancies/mine` | company, all statuses including `notSubmitted`, filter `status` |
 | `GET /vacancies/admin` | admin, submitted vacancies only, filters `status` (not `notSubmitted`: 400), `companyId` |
