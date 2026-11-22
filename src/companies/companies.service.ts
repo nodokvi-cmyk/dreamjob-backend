@@ -19,6 +19,7 @@ import {
 } from '../shared/mongo/search-patterns.js';
 import { excerpt } from '../shared/text/excerpt.js';
 import { CompanyFilterDto } from './dto/company-filter.dto.js';
+import type { CompanySort } from './dto/company-filter.dto.js';
 import { AwsS3Service } from '../aws-s3/aws-s3.service.js';
 import {
   ImageKind,
@@ -197,14 +198,7 @@ export class CompaniesService implements EmailChangeStore {
       { $skip: (page - 1) * take },
       { $limit: take },
     ];
-    const stages: PipelineStage[] =
-      sort === 'newest'
-        ? [{ $sort: { _id: -1 } }, ...pageStages, ...countOpen]
-        : [
-            ...countOpen,
-            { $sort: { openVacancies: -1, companyName: 1, _id: 1 } },
-            ...pageStages,
-          ];
+    const stages = this.publicSortStages(sort, countOpen, pageStages);
 
     const [rows, total] = await Promise.all([
       this.companyModel
@@ -243,6 +237,67 @@ export class CompaniesService implements EmailChangeStore {
       page,
       take,
     };
+  }
+
+  private publicSortStages(
+    sort: CompanySort | undefined,
+    countOpen: PipelineStage[],
+    pageStages: PipelineStage[],
+  ): PipelineStage[] {
+    switch (sort) {
+      case 'newest':
+        return [{ $sort: { _id: -1 } }, ...pageStages, ...countOpen];
+      case 'oldest':
+        return [{ $sort: { _id: 1 } }, ...pageStages, ...countOpen];
+      case 'rating':
+        return [
+          {
+            $addFields: {
+              ratingTier: {
+                $cond: [
+                  {
+                    $gte: [
+                      { $ifNull: ['$ratingCount', 0] },
+                      MIN_RANKED_RATINGS,
+                    ],
+                  },
+                  2,
+                  {
+                    $cond: [
+                      { $gte: [{ $ifNull: ['$ratingCount', 0] }, 1] },
+                      1,
+                      0,
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+          {
+            $sort: {
+              ratingTier: -1,
+              ratingAverage: -1,
+              ratingCount: -1,
+              companyName: 1,
+              _id: 1,
+            },
+          },
+          ...pageStages,
+          ...countOpen,
+        ];
+      case 'fewest':
+        return [
+          ...countOpen,
+          { $sort: { openVacancies: 1, companyName: 1, _id: 1 } },
+          ...pageStages,
+        ];
+      default:
+        return [
+          ...countOpen,
+          { $sort: { openVacancies: -1, companyName: 1, _id: 1 } },
+          ...pageStages,
+        ];
+    }
   }
 
   async listTopRated() {
