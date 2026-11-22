@@ -132,7 +132,7 @@ Per list:
 - `isBookmarked`: `true` or `false`.
 - Real values only for a request with a user token. Anonymous visitors, companies and admins always get `null` and `false`.
 
-**Send the token.** `GET /vacancies` now reads an optional token (a missing or bad token counts as anonymous). The vacancies page and the latest-vacancies block on the home page load on the Next.js server, which has no access to the token in `localStorage`. For a logged-in user, fetch the list (and the details page) from the browser with the `Authorization` header, or `myApplication` is always `null` and `isBookmarked` always `false`. Anonymous visitors can keep the server-rendered list.
+**Send the token.** `GET /vacancies` now reads an optional token (a missing or bad token counts as anonymous). The vacancies page loads on the Next.js server, which has no access to the token in `localStorage`. The latest-vacancies block on the home page uses `GET /vacancies/latest` instead (anonymous, cached, no token needed). For a logged-in user, fetch the list (and the details page) from the browser with the `Authorization` header, or `myApplication` is always `null` and `isBookmarked` always `false`. Anonymous visitors can keep the server-rendered list.
 
 **Parsers to change.** `parseVacancy` requires `requirements`, which cards do not have, so list items (public list, home latest block, `mine`, `admin`) need a card parser; the details page keeps the full parser.
 
