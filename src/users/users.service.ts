@@ -15,6 +15,7 @@ import {
   processImage,
 } from '../aws-s3/process-image.js';
 import { StoragePrefix } from '../aws-s3/storage-prefix.js';
+import { RatingsService } from '../ratings/ratings.service.js';
 import { BookmarksService } from '../bookmarks/bookmarks.service.js';
 import { CompaniesService } from '../companies/companies.service.js';
 import { EmailClaimsService } from '../email-claims/email-claims.service.js';
@@ -41,6 +42,7 @@ export class UsersService implements EmailChangeStore {
     private readonly companiesService: CompaniesService,
     private readonly applications: ApplicationsService,
     private readonly bookmarks: BookmarksService,
+    private readonly ratings: RatingsService,
     private readonly notifications: NotificationsService,
     private readonly publications: PublicationsService,
   ) {}
@@ -498,6 +500,7 @@ export class UsersService implements EmailChangeStore {
     await this.applications.detachUser(id);
     await this.bookmarks.removeForUser(id);
     await this.publications.removeForUser(id);
+    await this.ratings.removeForUser(id);
     await this.notifications.removeForRecipient(id, AuthRole.USER);
   }
 }
