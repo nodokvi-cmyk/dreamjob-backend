@@ -233,15 +233,15 @@ export class CompaniesService implements EmailChangeStore {
   }
 
   async getPublicProfile(id: string) {
-    const company = await this.companyModel.findOne({
-      _id: id,
-      approved: true,
-    });
+    const [company, openVacancies] = await Promise.all([
+      this.companyModel.findOne({ _id: id, approved: true }),
+      this.vacancies.openCount(id),
+    ]);
     if (!company) throw new NotFoundException('Company not found');
 
     return {
       id: company.id,
-      openVacancies: await this.vacancies.openCount(id),
+      openVacancies,
       companyName: company.companyName,
       description: company.description,
       website: company.website,
