@@ -7,6 +7,7 @@ import { NotificationsModule } from '../notifications/notifications.module.js';
 import { PaymentModule } from '../payment/payment.module.js';
 import { CompaniesController } from './companies.controller.js';
 import { CompaniesService } from './companies.service.js';
+import { RatingsModule } from '../ratings/ratings.module.js';
 import { VacanciesModule } from '../vacancies/vacancies.module.js';
 import { Company, companySchema } from './schema/company.schema.js';
 
@@ -19,6 +20,7 @@ import { Company, companySchema } from './schema/company.schema.js';
     NotificationsModule,
     ApplicationsModule,
     PaymentModule,
+    RatingsModule,
   ],
   controllers: [CompaniesController],
   providers: [CompaniesService],
