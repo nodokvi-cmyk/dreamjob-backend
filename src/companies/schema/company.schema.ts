@@ -91,6 +91,12 @@ export class Company {
   @Prop({ type: String, default: '' })
   logoKey!: string;
 
+  @Prop({ type: Number, default: 0, min: 0, max: 5 })
+  ratingAverage!: number;
+
+  @Prop({ type: Number, default: 0, min: 0 })
+  ratingCount!: number;
+
   @Prop({ type: String, enum: BillingPlan, required: false })
   plan?: BillingPlan;
 
@@ -136,6 +142,8 @@ export class Company {
 export type CompanyDocument = HydratedDocument<Company>;
 
 export const companySchema = SchemaFactory.createForClass(Company);
+
+companySchema.index({ approved: 1, ratingAverage: -1, ratingCount: -1 });
 
 companySchema.virtual('isProfileComplete').get(function (
   this: CompanyDocument,
