@@ -47,6 +47,7 @@ import { UpdateVacancyDto } from './dto/update-vacancy.dto.js';
 import {
   AdminVacanciesFilterDto,
   OwnVacanciesFilterDto,
+  PublicVacanciesFilterDto,
   VacancyFilterDto,
   VacancySort,
 } from './dto/vacancy-filter.dto.js';
@@ -302,10 +303,11 @@ export class VacanciesService {
     }
   }
 
-  async listPublic(query: VacancyFilterDto, viewer: Viewer | null) {
+  async listPublic(query: PublicVacanciesFilterDto, viewer: Viewer | null) {
     const now = new Date();
     const filter = allOf(
       { status: VacancyStatus.PUBLISHED, deadline: { $gt: now } },
+      query.companyId ? { company: new Types.ObjectId(query.companyId) } : {},
       this.buildFilter(query),
     );
 

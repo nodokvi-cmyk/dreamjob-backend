@@ -39,7 +39,7 @@ import { UpdateVacancyDto } from './dto/update-vacancy.dto.js';
 import {
   AdminVacanciesFilterDto,
   OwnVacanciesFilterDto,
-  VacancyFilterDto,
+  PublicVacanciesFilterDto,
 } from './dto/vacancy-filter.dto.js';
 import { VacancyPhotoParamsDto } from './dto/vacancy-photo-params.dto.js';
 import { MAX_VACANCY_PHOTOS } from './schema/vacancy.schema.js';
@@ -56,7 +56,7 @@ export class VacanciesController {
   @Get()
   @UseGuards(OptionalAuthGuard)
   findAll(
-    @Query() query: VacancyFilterDto,
+    @Query() query: PublicVacanciesFilterDto,
     @OptionalViewer() viewer: Viewer | null,
   ) {
     return this.vacanciesService.listPublic(query, viewer);

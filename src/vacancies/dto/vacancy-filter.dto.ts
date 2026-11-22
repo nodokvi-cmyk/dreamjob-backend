@@ -82,6 +82,12 @@ export class VacancyFilterDto extends PaginationDto {
   sort?: VacancySort;
 }
 
+export class PublicVacanciesFilterDto extends VacancyFilterDto {
+  @IsOptional()
+  @IsMongoId()
+  companyId?: string;
+}
+
 export class OwnVacanciesFilterDto extends VacancyFilterDto {
   @IsOptional()
   @IsIn(VACANCY_VIEW_STATUSES)

@@ -119,7 +119,7 @@ Response ids: a vacancy uses `id` (not `_id`).
 - `companyApproved: false`: show the warning "This company currently has no approved status" and the company name as plain text (its public page answers 404).
 
 Per list:
-- `GET /vacancies` (public): also `myApplication` and `isBookmarked` (below). `status` is always `published`. No photos.
+- `GET /vacancies` (public): also `myApplication` and `isBookmarked` (below). `status` is always `published`. No photos. Optional `companyId` (Mongo id, 2026-11-22) lists only that company's vacancies, with every other filter, sort and paging as usual. Company profile page: show the 3 latest with `GET /vacancies?companyId=<id>&take=3&sort=-date` and a "See all vacancies" button to the vacancies page with `companyId` set (show a removable "Company: <name>" chip; the name comes from the profile or the cards). An invalid id answers 400.
 - `GET /vacancies/mine` (company): no `companyApproved` (every card is the caller's own company; show one banner or icon at the top of the dashboard from `approved` on `GET /auth/me`, not a warning on each card). Also `rejectionReason`, `submittedAt?`, `firstPublishedAt?`, `freeWindowEndsAt?`, `updatedAt`, and `photos` as `[{ id, url }]` (kept for the delete confirm, which counts them).
 - `GET /vacancies/admin`: also `rejectionReason`, `submittedAt?`, `firstPublishedAt?`, `freeWindowEndsAt?`, `updatedAt`. No photos. Admin vacancies page: default the status filter to `pending` on first load, since pending vacancies are the admin's main work; clearing the filter (no `status`) shows all submitted vacancies.
 
