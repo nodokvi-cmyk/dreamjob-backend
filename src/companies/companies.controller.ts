@@ -28,6 +28,7 @@ import { uploadThrottle } from '../shared/throttle/upload-throttle.js';
 import { AuthRole } from '../shared/types/auth-role.js';
 import { CompaniesService } from './companies.service.js';
 import { ChoosePlanDto } from './dto/choose-plan.dto.js';
+import { CompanyFilterDto } from './dto/company-filter.dto.js';
 import { UpdateCompanyDto } from './dto/update-company.dto.js';
 
 @Controller('companies')
@@ -46,6 +47,11 @@ export class CompaniesController {
         this.companiesService.toResponse(company),
       ),
     };
+  }
+
+  @Get('public')
+  listPublic(@Query() filter: CompanyFilterDto) {
+    return this.companiesService.listPublic(filter);
   }
 
   @Get(':id/profile')

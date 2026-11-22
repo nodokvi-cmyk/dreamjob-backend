@@ -5,7 +5,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, UpdateQuery } from 'mongoose';
+import { Model, Types, UpdateQuery } from 'mongoose';
+import {
+  searchWords,
+  wordStartPattern,
+} from '../shared/mongo/search-patterns.js';
+import { excerpt } from '../shared/text/excerpt.js';
+import { CompanyFilterDto } from './dto/company-filter.dto.js';
 import { AwsS3Service } from '../aws-s3/aws-s3.service.js';
 import {
   ImageKind,
@@ -29,6 +35,11 @@ import { OtpPurpose } from '../shared/types/otp-purpose.js';
 import { VacanciesService } from '../vacancies/vacancies.service.js';
 import { UpdateCompanyDto } from './dto/update-company.dto.js';
 import { Company, CompanyDocument } from './schema/company.schema.js';
+
+type PublicCompanyRow = Pick<
+  Company,
+  'companyName' | 'description' | 'location' | 'operatingCities' | 'logoKey'
+> & { _id: Types.ObjectId; openVacancies: number };
 
 type CompanyChanges = Partial<
   Pick<
@@ -124,6 +135,88 @@ export class CompaniesService implements EmailChangeStore {
     );
   }
 
+  async listPublic({ page, take, q, location, sort }: CompanyFilterDto) {
+    const filter: Record<string, unknown>[] = [{ approved: true }];
+    for (const word of searchWords(q ?? '', 5)) {
+      filter.push({
+        companyName: { $regex: wordStartPattern(word), $options: 'i' },
+      });
+    }
+    if (location) {
+      const pattern = { $regex: wordStartPattern(location), $options: 'i' };
+      filter.push({
+        $or: [{ location: pattern }, { operatingCities: pattern }],
+      });
+    }
+    const match = { $and: filter };
+
+    const order: Record<string, 1 | -1> =
+      sort === 'newest'
+        ? { _id: -1 }
+        : { openVacancies: -1, companyName: 1, _id: 1 };
+
+    const [rows, total] = await Promise.all([
+      this.companyModel
+        .aggregate<PublicCompanyRow>([
+          { $match: match },
+          {
+            $lookup: {
+              from: this.vacancies.collectionName,
+              localField: '_id',
+              foreignField: 'company',
+              pipeline: [
+                {
+                  $match: {
+                    status: 'published',
+                    deadline: { $gt: new Date() },
+                  },
+                },
+                { $count: 'total' },
+              ],
+              as: 'open',
+            },
+          },
+          {
+            $addFields: {
+              openVacancies: {
+                $ifNull: [{ $arrayElemAt: ['$open.total', 0] }, 0],
+              },
+            },
+          },
+          { $sort: order },
+          { $skip: (page - 1) * take },
+          { $limit: take },
+          {
+            $project: {
+              companyName: 1,
+              description: 1,
+              location: 1,
+              operatingCities: 1,
+              logoKey: 1,
+              openVacancies: 1,
+            },
+          },
+        ])
+        .collation({ locale: 'en' }),
+      this.companyModel.countDocuments(match),
+    ]);
+
+    return {
+      items: rows.map((row) => ({
+        id: row._id.toString(),
+        companyName: row.companyName,
+        logoUrl: this.s3.publicUrl(row.logoKey),
+        excerpt: excerpt(row.description),
+        location: row.location,
+        operatingCities: row.operatingCities,
+        openVacancies: row.openVacancies,
+      })),
+      total,
+      page,
+      take,
+    };
+  }
+
   async getPublicProfile(id: string) {
     const company = await this.companyModel.findOne({
       _id: id,
@@ -133,6 +226,7 @@ export class CompaniesService implements EmailChangeStore {
 
     return {
       id: company.id,
+      openVacancies: await this.vacancies.openCount(id),
       companyName: company.companyName,
       description: company.description,
       website: company.website,

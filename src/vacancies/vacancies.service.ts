@@ -151,6 +151,18 @@ export class VacanciesService {
     private readonly notifications: NotificationsService,
   ) {}
 
+  get collectionName(): string {
+    return this.vacancyModel.collection.collectionName;
+  }
+
+  async openCount(companyId: string): Promise<number> {
+    return this.vacancyModel.countDocuments({
+      company: companyId,
+      status: VacancyStatus.PUBLISHED,
+      deadline: { $gt: new Date() },
+    });
+  }
+
   toResponse(vacancy: VacancyRecord, includePrivate: boolean) {
     const response = {
       id: vacancy._id.toString(),
