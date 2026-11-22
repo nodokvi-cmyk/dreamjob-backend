@@ -10,7 +10,10 @@ import {
   Min,
 } from 'class-validator';
 import { PaginationDto } from '../../shared/dto/pagination.dto.js';
-import { trim } from '../../shared/transforms/string.transforms.js';
+import {
+  emptyToUndefined,
+  trim,
+} from '../../shared/transforms/string.transforms.js';
 import {
   ADMIN_VACANCY_VIEW_STATUSES,
   Currency,
@@ -84,6 +87,7 @@ export class VacancyFilterDto extends PaginationDto {
 
 export class PublicVacanciesFilterDto extends VacancyFilterDto {
   @IsOptional()
+  @Transform(emptyToUndefined)
   @IsMongoId()
   companyId?: string;
 }

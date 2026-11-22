@@ -5,7 +5,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types, UpdateQuery } from 'mongoose';
+import {
+  Model,
+  PipelineStage,
+  QueryFilter,
+  Types,
+  UpdateQuery,
+} from 'mongoose';
+import { VacancyStatus } from '../vacancies/schema/vacancy.schema.js';
 import {
   searchWords,
   wordStartPattern,
@@ -136,7 +143,7 @@ export class CompaniesService implements EmailChangeStore {
   }
 
   async listPublic({ page, take, q, location, sort }: CompanyFilterDto) {
-    const filter: Record<string, unknown>[] = [{ approved: true }];
+    const filter: QueryFilter<Company>[] = [{ approved: true }];
     for (const word of searchWords(q ?? '', 5)) {
       filter.push({
         companyName: { $regex: wordStartPattern(word), $options: 'i' },
@@ -150,42 +157,50 @@ export class CompaniesService implements EmailChangeStore {
     }
     const match = { $and: filter };
 
-    const order: Record<string, 1 | -1> =
+    const countOpen: PipelineStage[] = [
+      {
+        $lookup: {
+          from: this.vacancies.collectionName,
+          localField: '_id',
+          foreignField: 'company',
+          pipeline: [
+            {
+              $match: {
+                status: VacancyStatus.PUBLISHED,
+                deadline: { $gt: new Date() },
+              },
+            },
+            { $count: 'total' },
+          ],
+          as: 'open',
+        },
+      },
+      {
+        $addFields: {
+          openVacancies: {
+            $ifNull: [{ $arrayElemAt: ['$open.total', 0] }, 0],
+          },
+        },
+      },
+    ];
+    const pageStages: PipelineStage[] = [
+      { $skip: (page - 1) * take },
+      { $limit: take },
+    ];
+    const stages: PipelineStage[] =
       sort === 'newest'
-        ? { _id: -1 }
-        : { openVacancies: -1, companyName: 1, _id: 1 };
+        ? [{ $sort: { _id: -1 } }, ...pageStages, ...countOpen]
+        : [
+            ...countOpen,
+            { $sort: { openVacancies: -1, companyName: 1, _id: 1 } },
+            ...pageStages,
+          ];
 
     const [rows, total] = await Promise.all([
       this.companyModel
         .aggregate<PublicCompanyRow>([
           { $match: match },
-          {
-            $lookup: {
-              from: this.vacancies.collectionName,
-              localField: '_id',
-              foreignField: 'company',
-              pipeline: [
-                {
-                  $match: {
-                    status: 'published',
-                    deadline: { $gt: new Date() },
-                  },
-                },
-                { $count: 'total' },
-              ],
-              as: 'open',
-            },
-          },
-          {
-            $addFields: {
-              openVacancies: {
-                $ifNull: [{ $arrayElemAt: ['$open.total', 0] }, 0],
-              },
-            },
-          },
-          { $sort: order },
-          { $skip: (page - 1) * take },
-          { $limit: take },
+          ...stages,
           {
             $project: {
               companyName: 1,
@@ -206,9 +221,9 @@ export class CompaniesService implements EmailChangeStore {
         id: row._id.toString(),
         companyName: row.companyName,
         logoUrl: this.s3.publicUrl(row.logoKey),
-        excerpt: excerpt(row.description),
-        location: row.location,
-        operatingCities: row.operatingCities,
+        excerpt: excerpt(row.description ?? ''),
+        location: row.location ?? '',
+        operatingCities: row.operatingCities ?? [],
         openVacancies: row.openVacancies,
       })),
       total,

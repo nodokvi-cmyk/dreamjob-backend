@@ -3,6 +3,9 @@ import { TransformFnParams } from 'class-transformer';
 export const trim = ({ value }: TransformFnParams): unknown =>
   typeof value === 'string' ? value.trim() : value;
 
+export const emptyToUndefined = ({ value }: TransformFnParams): unknown =>
+  typeof value === 'string' && value.trim() === '' ? undefined : value;
+
 export const trimEach = ({ value }: TransformFnParams): unknown =>
   Array.isArray(value)
     ? value.map((item: unknown) =>
