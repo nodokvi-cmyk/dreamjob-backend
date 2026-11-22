@@ -39,13 +39,22 @@ import { BillingPlan } from '../shared/types/billing-plan.js';
 import type { EmailChangeStore } from '../shared/types/email-change-store.js';
 import { otpAttemptsLeftFilter } from '../shared/crypto/otp-attempts.js';
 import { OtpPurpose } from '../shared/types/otp-purpose.js';
+import { MIN_RANKED_RATINGS, ratingOf } from '../ratings/rating-value.js';
+import { RatingsService } from '../ratings/ratings.service.js';
+import type { Viewer } from '../shared/types/viewer.js';
 import { VacanciesService } from '../vacancies/vacancies.service.js';
 import { UpdateCompanyDto } from './dto/update-company.dto.js';
 import { Company, CompanyDocument } from './schema/company.schema.js';
 
 type PublicCompanyRow = Pick<
   Company,
-  'companyName' | 'description' | 'location' | 'operatingCities' | 'logoKey'
+  | 'companyName'
+  | 'description'
+  | 'location'
+  | 'operatingCities'
+  | 'logoKey'
+  | 'ratingAverage'
+  | 'ratingCount'
 > & { _id: Types.ObjectId; openVacancies: number };
 
 type CompanyChanges = Partial<
@@ -71,6 +80,7 @@ export class CompaniesService implements EmailChangeStore {
     private readonly notifications: NotificationsService,
     private readonly applications: ApplicationsService,
     private readonly payment: PaymentService,
+    private readonly ratings: RatingsService,
   ) {}
 
   toResponse(company: CompanyDocument) {
@@ -208,6 +218,8 @@ export class CompaniesService implements EmailChangeStore {
               location: 1,
               operatingCities: 1,
               logoKey: 1,
+              ratingAverage: 1,
+              ratingCount: 1,
               openVacancies: 1,
             },
           },
@@ -225,6 +237,7 @@ export class CompaniesService implements EmailChangeStore {
         location: row.location ?? '',
         operatingCities: row.operatingCities ?? [],
         openVacancies: row.openVacancies,
+        rating: ratingOf(row.ratingAverage, row.ratingCount),
       })),
       total,
       page,
@@ -232,10 +245,31 @@ export class CompaniesService implements EmailChangeStore {
     };
   }
 
-  async getPublicProfile(id: string) {
-    const [company, openVacancies] = await Promise.all([
+  async listTopRated() {
+    const companies = await this.companyModel
+      .find({ approved: true, ratingCount: { $gte: MIN_RANKED_RATINGS } })
+      .sort({ ratingAverage: -1, ratingCount: -1, _id: 1 })
+      .limit(5)
+      .select('companyName logoKey ratingAverage ratingCount')
+      .lean();
+
+    return {
+      items: companies.map((company) => ({
+        id: company._id.toString(),
+        companyName: company.companyName,
+        logoUrl: this.s3.publicUrl(company.logoKey),
+        rating: ratingOf(company.ratingAverage, company.ratingCount),
+      })),
+    };
+  }
+
+  async getPublicProfile(id: string, viewer: Viewer | null) {
+    const [company, openVacancies, myRating] = await Promise.all([
       this.companyModel.findOne({ _id: id, approved: true }),
       this.vacancies.openCount(id),
+      viewer?.accountRole === AuthRole.USER
+        ? this.ratings.findMine(id, viewer.accountId)
+        : null,
     ]);
     if (!company) throw new NotFoundException('Company not found');
 
@@ -251,6 +285,9 @@ export class CompaniesService implements EmailChangeStore {
       email: company.email,
       phone: company.phone,
       director: company.director ?? null,
+      rating: ratingOf(company.ratingAverage, company.ratingCount),
+      ratingCount: company.ratingCount,
+      myRating,
     };
   }
 
@@ -574,5 +611,6 @@ export class CompaniesService implements EmailChangeStore {
     await this.vacancies.removeAllByCompany(id);
     await this.emailClaims.releaseAll(id);
     await this.notifications.removeForRecipient(id, AuthRole.COMPANY);
+    await this.ratings.removeForCompany(id);
   }
 }

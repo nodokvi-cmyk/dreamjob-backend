@@ -4,6 +4,7 @@ import {
   Delete,
   ForbiddenException,
   Get,
+  Header,
   Param,
   Patch,
   Query,
@@ -13,6 +14,9 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { uploadFilePipe, uploadLimits } from '../aws-s3/upload-file.js';
+import { OptionalAuthGuard } from '../guards/optional-auth.guard.js';
+import { OptionalViewer } from '../shared/decorators/optional-viewer.decorator.js';
+import type { Viewer } from '../shared/types/viewer.js';
 import { IsAuthGuard } from '../guards/is-auth.guard.js';
 import { AllowPasswordSetup } from '../shared/decorators/allow-password-setup.decorator.js';
 import { RolesGuard } from '../guards/roles.guard.js';
@@ -54,9 +58,22 @@ export class CompaniesController {
     return this.companiesService.listPublic(filter);
   }
 
+  @Get('top-rated')
+  @Header(
+    'Cache-Control',
+    'public, max-age=0, s-maxage=60, stale-while-revalidate=300',
+  )
+  listTopRated() {
+    return this.companiesService.listTopRated();
+  }
+
   @Get(':id/profile')
-  getPublicProfile(@Param() { id }: IsValidMongoIdDto) {
-    return this.companiesService.getPublicProfile(id);
+  @UseGuards(OptionalAuthGuard)
+  getPublicProfile(
+    @Param() { id }: IsValidMongoIdDto,
+    @OptionalViewer() viewer: Viewer | null,
+  ) {
+    return this.companiesService.getPublicProfile(id, viewer);
   }
 
   @Get(':id')
