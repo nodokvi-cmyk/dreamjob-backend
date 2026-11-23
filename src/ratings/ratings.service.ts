@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Company } from '../companies/schema/company.schema.js';
 import { isDuplicateKeyError } from '../shared/mongo/is-duplicate-key-error.js';
-import { ratingOf, roundAverage } from './rating-value.js';
+import { ratingOf } from './rating-value.js';
 import { Rating } from './schema/rating.schema.js';
 
 const REPAIR_LIMIT = 100;
@@ -119,7 +119,7 @@ export class RatingsService {
                       ],
                     },
                   },
-                  0.01,
+                  1e-9,
                 ],
               },
             ],
@@ -135,7 +135,7 @@ export class RatingsService {
         { _id: row._id },
         {
           $set: {
-            ratingAverage: roundAverage(row.average),
+            ratingAverage: row.average,
             ratingCount: row.count,
           },
         },
@@ -196,7 +196,7 @@ export class RatingsService {
       },
     ]);
 
-    const ratingAverage = totals ? roundAverage(totals.average) : 0;
+    const ratingAverage = totals ? totals.average : 0;
     const ratingCount = totals?.count ?? 0;
 
     const { matchedCount } = await this.companyModel.updateOne(

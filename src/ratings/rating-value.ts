@@ -7,7 +7,3 @@ export function ratingOf(
   if (!count || average === undefined) return null;
   return Math.round(average * 10) / 10;
 }
-
-export function roundAverage(average: number): number {
-  return Math.round(average * 100) / 100;
-}
