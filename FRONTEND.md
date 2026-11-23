@@ -163,7 +163,7 @@ Per list:
 | `GET /vacancies` | public, published and not expired |
 | `PUT`/`DELETE /companies/:id/rating` | role `user` only (strict limit) |
 | `GET /companies/top-rated` | public, 5 best rated approved companies (5+ ratings), edge cached 60 s |
-| `GET /vacancies/latest` | public, anonymous cards, 5 newest published and not expired, edge cached 60 s |
+| `GET /vacancies/latest` | public, anonymous cards, 5 most recently approved (first approval time) published and not expired, edge cached 60 s |
 | `GET /vacancies/:id` | public sees `published` and `closed`; the owner sees all; an admin sees every submitted vacancy (a `notSubmitted` one gives 404) |
 | `GET /vacancies/mine` | company, all statuses including `notSubmitted`, filter `status` |
 | `GET /vacancies/admin` | admin, submitted vacancies only, filters `status` (not `notSubmitted`: 400), `companyId` |

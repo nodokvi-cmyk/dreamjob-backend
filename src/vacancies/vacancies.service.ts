@@ -341,7 +341,7 @@ export class VacanciesService {
   async listLatest() {
     const items = await this.vacancyModel
       .find({ status: VacancyStatus.PUBLISHED, deadline: { $gt: new Date() } })
-      .sort({ createdAt: -1, _id: -1 })
+      .sort({ firstPublishedAt: -1, _id: -1 })
       .limit(LATEST_VACANCIES)
       .lean<VacancyRecord[]>();
     const context = await this.userContext(items, null);

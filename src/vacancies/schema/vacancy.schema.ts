@@ -173,3 +173,4 @@ export const vacancySchema = SchemaFactory.createForClass(Vacancy);
 
 vacancySchema.index({ status: 1, createdAt: -1, deadline: 1 });
 vacancySchema.index({ company: 1, createdAt: -1 });
+vacancySchema.index({ status: 1, firstPublishedAt: -1 });
