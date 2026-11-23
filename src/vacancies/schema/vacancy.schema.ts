@@ -150,6 +150,9 @@ export class Vacancy {
   firstPublishedAt?: Date;
 
   @Prop({ type: Date, required: false })
+  closedAt?: Date;
+
+  @Prop({ type: Date, required: false })
   freeWindowEndsAt?: Date;
 
   @Prop({ type: Date, required: false })

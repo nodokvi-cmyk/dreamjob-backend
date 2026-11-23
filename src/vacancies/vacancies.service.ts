@@ -325,9 +325,10 @@ export class VacanciesService {
       this.buildFilter(query),
     );
 
-    const sorting =
-      isPast && !query.sort ? { ...query, sort: '-deadline' as const } : query;
-    const { items, total } = await this.findPageAndCount(filter, sorting);
+    const { items, total } =
+      isPast && !query.sort
+        ? await this.findPastPageAndCount(filter, query)
+        : await this.findPageAndCount(filter, query);
     const context = await this.userContext(items, viewer);
 
     return {
@@ -549,7 +550,7 @@ export class VacanciesService {
           status: VacancyStatus.PUBLISHED,
           deadline: { $gt: new Date() },
         },
-        { $set: { status: VacancyStatus.CLOSED } },
+        { $set: { status: VacancyStatus.CLOSED, closedAt: new Date() } },
         { returnDocument: 'after' },
       )
       .lean<VacancyRecord>();
@@ -978,6 +979,24 @@ export class VacanciesService {
   ) {
     const [items, total] = await Promise.all([
       this.findPage(filter, sort, (page - 1) * take, take),
+      this.vacancyModel.countDocuments(filter),
+    ]);
+
+    return { items, total };
+  }
+
+  private async findPastPageAndCount(
+    filter: VacancyFilter,
+    { page, take }: VacancyFilterDto,
+  ) {
+    const [items, total] = await Promise.all([
+      this.vacancyModel.aggregate<VacancyRecord>([
+        { $match: filter },
+        { $addFields: { endedAt: { $ifNull: ['$closedAt', '$deadline'] } } },
+        { $sort: { endedAt: -1, _id: -1 } },
+        { $skip: (page - 1) * take },
+        { $limit: take },
+      ]),
       this.vacancyModel.countDocuments(filter),
     ]);
 
