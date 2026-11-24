@@ -4,15 +4,16 @@ import {
   Delete,
   ForbiddenException,
   Get,
-  Header,
   Param,
   Patch,
   Query,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import { uploadFilePipe, uploadLimits } from '../aws-s3/upload-file.js';
 import { OptionalAuthGuard } from '../guards/optional-auth.guard.js';
 import { OptionalViewer } from '../shared/decorators/optional-viewer.decorator.js';
@@ -26,6 +27,7 @@ import { Roles } from '../shared/decorators/roles.decorator.js';
 import { ChangePasswordDto } from '../shared/dto/change-password.dto.js';
 import { IsValidMongoIdDto } from '../shared/dto/is-valid-mongo-id.dto.js';
 import { PaginationDto } from '../shared/dto/pagination.dto.js';
+import { withPublicCache } from '../shared/http/public-cache.js';
 import { strictThrottle } from '../shared/throttle/strict-throttle.js';
 import { Throttle } from '../shared/throttle/throttle.decorator.js';
 import { uploadThrottle } from '../shared/throttle/upload-throttle.js';
@@ -59,12 +61,10 @@ export class CompaniesController {
   }
 
   @Get('top-rated')
-  @Header(
-    'Cache-Control',
-    'public, max-age=0, s-maxage=60, stale-while-revalidate=300',
-  )
-  listTopRated() {
-    return this.companiesService.listTopRated();
+  listTopRated(@Res({ passthrough: true }) response: Response) {
+    return withPublicCache(response, () =>
+      this.companiesService.listTopRated(),
+    );
   }
 
   @Get(':id/profile')

@@ -3,18 +3,19 @@ import {
   Controller,
   Delete,
   Get,
-  Header,
   HttpCode,
   HttpStatus,
   Param,
   Patch,
   Post,
   Query,
+  Res,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import {
   optionalUploadFilesPipe,
   uploadFilesPipe,
@@ -28,6 +29,7 @@ import { AccountRole } from '../shared/decorators/account-role.decorator.js';
 import { OptionalViewer } from '../shared/decorators/optional-viewer.decorator.js';
 import { Roles } from '../shared/decorators/roles.decorator.js';
 import { IsValidMongoIdDto } from '../shared/dto/is-valid-mongo-id.dto.js';
+import { withPublicCache } from '../shared/http/public-cache.js';
 import { strictThrottle } from '../shared/throttle/strict-throttle.js';
 import { Throttle } from '../shared/throttle/throttle.decorator.js';
 import { uploadThrottle } from '../shared/throttle/upload-throttle.js';
@@ -64,12 +66,8 @@ export class VacanciesController {
   }
 
   @Get('latest')
-  @Header(
-    'Cache-Control',
-    'public, max-age=0, s-maxage=60, stale-while-revalidate=300',
-  )
-  findLatest() {
-    return this.vacanciesService.listLatest();
+  findLatest(@Res({ passthrough: true }) response: Response) {
+    return withPublicCache(response, () => this.vacanciesService.listLatest());
   }
 
   @Get('mine')
