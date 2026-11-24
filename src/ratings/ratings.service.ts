@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Company } from '../companies/schema/company.schema.js';
 import { isDuplicateKeyError } from '../shared/mongo/is-duplicate-key-error.js';
+import { User } from '../users/schema/user.schema.js';
 import { ratingOf } from './rating-value.js';
 import { Rating } from './schema/rating.schema.js';
 
@@ -24,13 +25,15 @@ export class RatingsService {
   constructor(
     @InjectModel(Rating.name) private readonly ratingModel: Model<Rating>,
     @InjectModel(Company.name) private readonly companyModel: Model<Company>,
+    @InjectModel(User.name) private readonly userModel: Model<User>,
   ) {}
 
   async rate(companyId: string, userId: string, stars: number) {
-    const approved = await this.companyModel.exists({
-      _id: companyId,
-      approved: true,
-    });
+    const [userExists, approved] = await Promise.all([
+      this.userModel.exists({ _id: userId }),
+      this.companyModel.exists({ _id: companyId, approved: true }),
+    ]);
+    if (!userExists) throw new NotFoundException('User not found');
     if (!approved) throw new NotFoundException('Company not found');
 
     await this.upsertStars(companyId, userId, stars);

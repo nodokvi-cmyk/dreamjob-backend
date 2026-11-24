@@ -11,7 +11,7 @@ import type {
 import { isHiddenFromUsers, vacancyStatusForUser } from './vacancy-status.js';
 
 export const VACANCY_CARD_PROJECTION =
-  'title description category employmentType workMode location salaryMin salaryMax currency deadline company status submittedAt approvedCard createdAt';
+  'title description category employmentType workMode location salaryMin salaryMax currency deadline company status submittedAt approvedCard createdAt firstPublishedAt';
 
 export type VacancyCardSource = Pick<
   VacancyRecord,
@@ -31,6 +31,7 @@ export type VacancyCardSource = Pick<
   | 'submittedAt'
   | 'approvedCard'
   | 'createdAt'
+  | 'firstPublishedAt'
 >;
 
 export type MyApplicationSummary = {
@@ -106,6 +107,7 @@ export function cardFields(vacancy: VacancyCardSource, forUsers: boolean) {
     currency: shown.currency,
     deadline: vacancy.deadline,
     createdAt: vacancy.createdAt,
+    firstPublishedAt: vacancy.firstPublishedAt,
     company: vacancy.company.toString(),
   };
 }

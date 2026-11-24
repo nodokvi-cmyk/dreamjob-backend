@@ -194,6 +194,7 @@ export class VacanciesService {
       photos: this.photosOf(vacancy),
       company: vacancy.company.toString(),
       createdAt: vacancy.createdAt,
+      firstPublishedAt: vacancy.firstPublishedAt,
     };
 
     if (!includePrivate) return response;
@@ -212,7 +213,6 @@ export class VacanciesService {
     return {
       rejectionReason: vacancy.rejectionReason ?? '',
       submittedAt: vacancy.submittedAt,
-      firstPublishedAt: vacancy.firstPublishedAt,
       freeWindowEndsAt: vacancy.freeWindowEndsAt,
       updatedAt: vacancy.updatedAt,
     };

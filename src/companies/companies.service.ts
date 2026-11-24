@@ -40,7 +40,11 @@ import { BillingPlan } from '../shared/types/billing-plan.js';
 import type { EmailChangeStore } from '../shared/types/email-change-store.js';
 import { otpAttemptsLeftFilter } from '../shared/crypto/otp-attempts.js';
 import { OtpPurpose } from '../shared/types/otp-purpose.js';
-import { MIN_RANKED_RATINGS, ratingOf } from '../ratings/rating-value.js';
+import {
+  MIN_RANKED_RATINGS,
+  SHOWN_RATING_EXPRESSION,
+  ratingOf,
+} from '../ratings/rating-value.js';
 import { RatingsService } from '../ratings/ratings.service.js';
 import type { Viewer } from '../shared/types/viewer.js';
 import { VacanciesService } from '../vacancies/vacancies.service.js';
@@ -57,6 +61,11 @@ type PublicCompanyRow = Pick<
   | 'ratingAverage'
   | 'ratingCount'
 > & { _id: Types.ObjectId; openVacancies: number };
+
+type TopRatedRow = Pick<
+  Company,
+  'companyName' | 'logoKey' | 'ratingAverage' | 'ratingCount'
+> & { _id: Types.ObjectId };
 
 type CompanyChanges = Partial<
   Pick<
@@ -271,12 +280,13 @@ export class CompaniesService implements EmailChangeStore {
                   },
                 ],
               },
+              shownRating: SHOWN_RATING_EXPRESSION,
             },
           },
           {
             $sort: {
               ratingTier: -1,
-              ratingAverage: -1,
+              shownRating: -1,
               ratingCount: -1,
               _id: 1,
             },
@@ -300,12 +310,25 @@ export class CompaniesService implements EmailChangeStore {
   }
 
   async listTopRated() {
-    const companies = await this.companyModel
-      .find({ approved: true, ratingCount: { $gte: MIN_RANKED_RATINGS } })
-      .sort({ ratingAverage: -1, ratingCount: -1, _id: 1 })
-      .limit(5)
-      .select('companyName logoKey ratingAverage ratingCount')
-      .lean();
+    const companies = await this.companyModel.aggregate<TopRatedRow>([
+      {
+        $match: {
+          approved: true,
+          ratingCount: { $gte: MIN_RANKED_RATINGS },
+        },
+      },
+      { $addFields: { shownRating: SHOWN_RATING_EXPRESSION } },
+      { $sort: { shownRating: -1, ratingCount: -1, _id: 1 } },
+      { $limit: 5 },
+      {
+        $project: {
+          companyName: 1,
+          logoKey: 1,
+          ratingAverage: 1,
+          ratingCount: 1,
+        },
+      },
+    ]);
 
     return {
       items: companies.map((company) => ({
