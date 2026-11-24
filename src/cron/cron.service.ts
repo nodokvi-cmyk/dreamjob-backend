@@ -90,7 +90,7 @@ export class CronService {
       repaired,
     };
     this.logger.log(
-      `Cleanup: ${result.users} users, ${result.companies} companies, ${result.claims} claims deleted; repaired ${repaired.users} users, ${repaired.companies} companies, ${repaired.vacancies} vacancies, ${repaired.publications} publications, ${repaired.failed} failed`,
+      `Cleanup: ${result.users} users, ${result.companies} companies, ${result.claims} claims deleted; repaired ${repaired.users} users, ${repaired.companies} companies, ${repaired.vacancies} vacancies, ${repaired.publications} publications, ${repaired.ratings} rating totals, ${repaired.failed} failed`,
     );
     return result;
   }
