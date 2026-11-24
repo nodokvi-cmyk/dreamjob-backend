@@ -122,14 +122,24 @@ const MAX_SEARCH_WORDS = 5;
 const LATEST_VACANCIES = 5;
 const PHOTO_KEY_PREFIX = `${StoragePrefix.VACANCY_PHOTOS}/`;
 
+type DateField = 'createdAt' | 'firstPublishedAt';
+
 const SORTS: Record<
-  Exclude<VacancySort, 'salary' | '-salary'>,
+  Exclude<VacancySort, 'salary' | '-salary' | 'date' | '-date'>,
   Record<string, 1 | -1>
 > = {
-  date: { createdAt: 1 },
-  '-date': { createdAt: -1 },
   deadline: { deadline: 1 },
   '-deadline': { deadline: -1 },
+};
+
+const sortSpec = (
+  sort: Exclude<VacancySort, 'salary' | '-salary'> | undefined,
+  dateField: DateField,
+): Record<string, 1 | -1> => {
+  if (sort === 'date') return { [dateField]: 1 };
+  if (sort === '-date' || sort === undefined) return { [dateField]: -1 };
+
+  return SORTS[sort];
 };
 
 const allOf = (...filters: VacancyFilter[]): VacancyFilter => {
@@ -328,7 +338,7 @@ export class VacanciesService {
     const { items, total } =
       isPast && !query.sort
         ? await this.findPastPageAndCount(filter, query)
-        : await this.findPageAndCount(filter, query);
+        : await this.findPageAndCount(filter, query, 'firstPublishedAt');
     const context = await this.userContext(items, viewer);
 
     return {
@@ -976,9 +986,10 @@ export class VacanciesService {
   private async findPageAndCount(
     filter: VacancyFilter,
     { sort, page, take }: VacancyFilterDto,
+    dateField: DateField = 'createdAt',
   ) {
     const [items, total] = await Promise.all([
-      this.findPage(filter, sort, (page - 1) * take, take),
+      this.findPage(filter, sort, (page - 1) * take, take, dateField),
       this.vacancyModel.countDocuments(filter),
     ]);
 
@@ -1008,6 +1019,7 @@ export class VacanciesService {
     sort: VacancySort | undefined,
     skip: number,
     limit: number,
+    dateField: DateField,
   ): Promise<VacancyRecord[]> {
     if (sort === 'salary' || sort === '-salary') {
       return this.vacancyModel.aggregate<VacancyRecord>([
@@ -1032,7 +1044,7 @@ export class VacanciesService {
 
     return this.vacancyModel
       .find(filter)
-      .sort({ ...SORTS[sort ?? '-date'], _id: -1 })
+      .sort({ ...sortSpec(sort, dateField), _id: -1 })
       .skip(skip)
       .limit(limit)
       .lean<VacancyRecord[]>();

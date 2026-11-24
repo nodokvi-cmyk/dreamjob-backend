@@ -212,7 +212,7 @@ Per list:
 - Expired vacancies that were published before cannot be edited until extended (400 `Expired vacancies must be extended before they can be changed`). Show a clear Extend button on them.
 - Frontend copy to add: a note at creation and next to Submit about the 60-day rule, the window end date on the owner's detail page, and on the extend screen "free until about X" or "may cost 1 credit and adds 60 days".
 
-Filters on every list: `q`, `category`, `location`, `workMode`, `employmentType`, `salaryMin`, `salaryMax`, `currency`, `sort` (`date`, `-date`, `salary`, `-salary`, `deadline`, `-deadline`, default `-date`), plus `page` and `take`. The category dropdown is a fixed list for now.
+Filters on every list: `q`, `category`, `location`, `workMode`, `employmentType`, `salaryMin`, `salaryMax`, `currency`, `sort` (`date`, `-date`, `salary`, `-salary`, `deadline`, `-deadline`, default `-date`; on the public `GET /vacancies` `date` means first approval time, the same as the home "Latest" block, on `mine` and `admin` it means creation time), plus `page` and `take`. The category dropdown is a fixed list for now.
 
 ## Billing and plans (company only, `/payment` and `PATCH /companies/:id/plan`)
 
