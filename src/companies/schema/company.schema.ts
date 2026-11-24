@@ -143,7 +143,12 @@ export type CompanyDocument = HydratedDocument<Company>;
 
 export const companySchema = SchemaFactory.createForClass(Company);
 
-companySchema.index({ approved: 1, ratingAverage: -1, ratingCount: -1 });
+companySchema.index({
+  approved: 1,
+  ratingAverage: -1,
+  ratingCount: -1,
+  _id: 1,
+});
 
 companySchema.virtual('isProfileComplete').get(function (
   this: CompanyDocument,
