@@ -1044,7 +1044,7 @@ export class VacanciesService {
 
     return this.vacancyModel
       .find(filter)
-      .sort({ ...sortSpec(sort, dateField), _id: -1 })
+      .sort({ ...sortSpec(sort, dateField), _id: sort === 'date' ? 1 : -1 })
       .skip(skip)
       .limit(limit)
       .lean<VacancyRecord[]>();
