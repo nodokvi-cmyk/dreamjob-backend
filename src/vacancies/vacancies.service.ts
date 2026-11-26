@@ -33,8 +33,8 @@ import {
   VacancyBillingService,
 } from '../payment/vacancy-billing.service.js';
 import { sameList } from '../shared/compare/same-list.js';
+import { JobCategory } from '../shared/categories/job-category.js';
 import {
-  exactPattern,
   searchWords,
   wordStartPattern,
 } from '../shared/mongo/search-patterns.js';
@@ -120,6 +120,7 @@ const RESUBMIT_STATUSES: readonly VacancyStatus[] = [
 ];
 const MAX_SEARCH_WORDS = 5;
 const LATEST_VACANCIES = 5;
+const TOP_CATEGORIES = 7;
 const PHOTO_KEY_PREFIX = `${StoragePrefix.VACANCY_PHOTOS}/`;
 
 type DateField = 'createdAt' | 'firstPublishedAt';
@@ -358,6 +359,26 @@ export class VacanciesService {
     const context = await this.userContext(items, null);
 
     return { items: items.map((vacancy) => userVacancyCard(vacancy, context)) };
+  }
+
+  async listTopCategories() {
+    const items = await this.vacancyModel.aggregate<{
+      category: JobCategory;
+      count: number;
+    }>([
+      {
+        $match: {
+          status: VacancyStatus.PUBLISHED,
+          deadline: { $gt: new Date() },
+        },
+      },
+      { $group: { _id: '$category', count: { $sum: 1 } } },
+      { $sort: { count: -1, _id: 1 } },
+      { $limit: TOP_CATEGORIES },
+      { $project: { _id: 0, category: '$_id', count: 1 } },
+    ]);
+
+    return { items };
   }
 
   async listOwn(companyId: string, query: OwnVacanciesFilterDto) {
@@ -917,11 +938,7 @@ export class VacanciesService {
         });
       }
     }
-    if (category) {
-      conditions.push({
-        category: { $regex: exactPattern(category), $options: 'i' },
-      });
-    }
+    if (category) conditions.push({ category });
     if (location) {
       conditions.push({
         location: { $regex: wordStartPattern(location), $options: 'i' },

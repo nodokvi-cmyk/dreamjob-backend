@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
 import { Company } from '../../companies/schema/company.schema.js';
+import { JobCategory } from '../../shared/categories/job-category.js';
 
 export enum VacancyStatus {
   PENDING = 'pending',
@@ -61,8 +62,8 @@ export class VacancyCardSnapshot {
   @Prop({ type: String, required: true })
   title!: string;
 
-  @Prop({ type: String, required: true })
-  category!: string;
+  @Prop({ type: String, enum: JobCategory, required: true })
+  category!: JobCategory;
 
   @Prop({ type: String, enum: EmploymentType, required: true })
   employmentType!: EmploymentType;
@@ -97,8 +98,8 @@ export class Vacancy {
   @Prop({ type: String, required: true, trim: true, maxlength: 5000 })
   description!: string;
 
-  @Prop({ type: String, required: true, trim: true, maxlength: 64 })
-  category!: string;
+  @Prop({ type: String, enum: JobCategory, required: true })
+  category!: JobCategory;
 
   @Prop({ type: String, enum: EmploymentType, required: true })
   employmentType!: EmploymentType;

@@ -70,6 +70,13 @@ export class VacanciesController {
     return withPublicCache(response, () => this.vacanciesService.listLatest());
   }
 
+  @Get('categories/top')
+  findTopCategories(@Res({ passthrough: true }) response: Response) {
+    return withPublicCache(response, () =>
+      this.vacanciesService.listTopCategories(),
+    );
+  }
+
   @Get('mine')
   @UseGuards(IsAuthGuard, RolesGuard)
   @Roles(AuthRole.COMPANY)
