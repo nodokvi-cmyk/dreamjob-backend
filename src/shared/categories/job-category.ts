@@ -3,6 +3,7 @@ export enum JobCategory {
   AGRICULTURE_ENVIRONMENT = 'Agriculture & Environment',
   ARCHITECTURE_ENGINEERING = 'Architecture & Engineering',
   ARTS_CULTURE = 'Arts & Culture',
+  AUTOMOTIVE = 'Automotive',
   BANKING_INSURANCE = 'Banking & Insurance',
   BEAUTY_WELLNESS = 'Beauty & Wellness',
   CONSTRUCTION = 'Construction',
