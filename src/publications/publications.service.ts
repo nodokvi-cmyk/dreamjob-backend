@@ -15,7 +15,6 @@ import { NotificationsService } from '../notifications/notifications.service.js'
 import { NotificationType } from '../notifications/schema/notification.schema.js';
 import { sameList } from '../shared/compare/same-list.js';
 import {
-  exactPattern,
   searchWords,
   wordStartPattern,
 } from '../shared/mongo/search-patterns.js';
@@ -853,11 +852,7 @@ export class PublicationsService {
         });
       }
     }
-    if (category) {
-      conditions.push({
-        category: { $regex: exactPattern(category), $options: 'i' },
-      });
-    }
+    if (category) conditions.push({ category });
     if (location) {
       conditions.push({
         locations: { $regex: wordStartPattern(location), $options: 'i' },

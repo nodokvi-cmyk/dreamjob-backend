@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
 import { User } from '../../users/schema/user.schema.js';
+import { JobCategory } from '../../shared/categories/job-category.js';
 import {
   Currency,
   EmploymentType,
@@ -42,8 +43,8 @@ export class Publication {
   @Prop({ type: String, required: true, trim: true, maxlength: 3000 })
   about!: string;
 
-  @Prop({ type: String, required: true, trim: true, maxlength: 64 })
-  category!: string;
+  @Prop({ type: String, enum: JobCategory, required: true })
+  category!: JobCategory;
 
   @Prop({ type: [String], enum: EmploymentType, default: [] })
   employmentTypes!: EmploymentType[];

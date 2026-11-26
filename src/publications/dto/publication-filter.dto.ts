@@ -9,8 +9,12 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { JobCategory } from '../../shared/categories/job-category.js';
 import { PaginationDto } from '../../shared/dto/pagination.dto.js';
-import { trim } from '../../shared/transforms/string.transforms.js';
+import {
+  emptyToUndefined,
+  trim,
+} from '../../shared/transforms/string.transforms.js';
 import {
   Currency,
   EmploymentType,
@@ -59,10 +63,9 @@ export class PublicationBoardFilterDto extends PaginationDto {
   q?: string;
 
   @IsOptional()
-  @Transform(trim)
-  @IsString()
-  @MaxLength(64)
-  category?: string;
+  @Transform(emptyToUndefined)
+  @IsEnum(JobCategory)
+  category?: JobCategory;
 
   @IsOptional()
   @Transform(trim)

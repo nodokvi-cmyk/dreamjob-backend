@@ -13,6 +13,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { JobCategory } from '../../shared/categories/job-category.js';
 import {
   toTrimmedList,
   trim,
@@ -40,11 +41,8 @@ export class CreatePublicationDto {
   @MaxWords(500)
   about!: string;
 
-  @Transform(trim)
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(64)
-  category!: string;
+  @IsEnum(JobCategory)
+  category!: JobCategory;
 
   @IsOptional()
   @Transform(toTrimmedList)
