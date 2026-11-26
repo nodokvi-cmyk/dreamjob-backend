@@ -1,6 +1,7 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { PUBLICATION_BOARD_SORTS } from '../publications/dto/publication-filter.dto.js';
+import { JobCategory } from '../shared/categories/job-category.js';
 import { AuthRole } from '../shared/types/auth-role.js';
 import { VACANCY_SORTS } from '../vacancies/dto/vacancy-filter.dto.js';
 import {
@@ -27,8 +28,9 @@ const sharedProperties = {
   },
   category: {
     type: 'string',
+    enum: Object.values(JobCategory),
     description:
-      'Only when the person names a category. It must match exactly, so use q for anything else.',
+      'Only when the request clearly fits one of these categories. Otherwise use q.',
   },
   location: {
     type: 'string',
