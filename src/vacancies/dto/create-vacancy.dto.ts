@@ -14,6 +14,7 @@ import {
   Min,
   MinDate,
 } from 'class-validator';
+import { JobCategory } from '../../shared/categories/job-category.js';
 import {
   toTrimmedList,
   trim,
@@ -42,11 +43,8 @@ export class CreateVacancyDto {
   @MaxLength(5000)
   description!: string;
 
-  @Transform(trim)
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(64)
-  category!: string;
+  @IsEnum(JobCategory)
+  category!: JobCategory;
 
   @IsEnum(EmploymentType)
   employmentType!: EmploymentType;

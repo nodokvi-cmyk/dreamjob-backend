@@ -9,6 +9,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { JobCategory } from '../../shared/categories/job-category.js';
 import { PaginationDto } from '../../shared/dto/pagination.dto.js';
 import {
   emptyToUndefined,
@@ -45,10 +46,9 @@ export class VacancyFilterDto extends PaginationDto {
   q?: string;
 
   @IsOptional()
-  @Transform(trim)
-  @IsString()
-  @MaxLength(64)
-  category?: string;
+  @Transform(emptyToUndefined)
+  @IsEnum(JobCategory)
+  category?: JobCategory;
 
   @IsOptional()
   @Transform(trim)
