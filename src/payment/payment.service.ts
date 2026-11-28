@@ -186,6 +186,44 @@ export class PaymentService {
     }
   }
 
+  private async completeCardDetails(method: Stripe.PaymentMethod) {
+    const customerId = idOf(method.customer);
+    const details = method.billing_details;
+    if (method.type !== 'card' || !customerId) return;
+    if (details.name && details.email) return;
+
+    const company = await this.companyModel.findOne({
+      stripeCustomerId: customerId,
+    });
+    if (!company) return;
+
+    const address = details.address;
+    try {
+      await this.stripe.paymentMethods.update(method.id, {
+        billing_details: {
+          name: details.name || company.companyName || company.email,
+          email: details.email || company.email,
+          ...(address
+            ? {
+                address: {
+                  city: address.city ?? undefined,
+                  country: address.country ?? undefined,
+                  line1: address.line1 ?? undefined,
+                  line2: address.line2 ?? undefined,
+                  postal_code: address.postal_code ?? undefined,
+                  state: address.state ?? undefined,
+                },
+              }
+            : {}),
+        },
+      });
+    } catch (error: unknown) {
+      this.logger.warn(
+        error instanceof Error ? error.message : 'Card details not completed',
+      );
+    }
+  }
+
   async createPortalSession(companyId: string) {
     const company = await this.companyModel
       .findById(companyId)
@@ -280,6 +318,9 @@ export class PaymentService {
         break;
       case 'customer.subscription.deleted':
         await this.endPlan(event.data.object);
+        break;
+      case 'payment_method.attached':
+        await this.completeCardDetails(event.data.object);
         break;
       default:
         break;
