@@ -4,6 +4,8 @@ export const STRIPE_APP_TAG = 'getdreamjob';
 
 export const CHECKOUT_PAYMENT_METHODS = 'pmc_1UdD7JLQGK6RLTYUefjcowlp';
 
+export const BILLING_PORTAL_CONFIGURATION = 'bpc_1UgnqoLQGK6RLTYUkLB4Oj2N';
+
 export const AUTHENTICATION_WAIT_DAYS = 5;
 export const PLAN_END_REASON_KEY = 'planEndReason';
 export const PLAN_END_AUTHENTICATION = 'authentication';

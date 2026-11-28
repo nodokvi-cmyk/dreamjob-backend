@@ -19,6 +19,7 @@ import { BillingPlan } from '../shared/types/billing-plan.js';
 import { claimPayment } from './claim-payment.js';
 import {
   AUTHENTICATION_WAIT_DAYS,
+  BILLING_PORTAL_CONFIGURATION,
   CHECKOUT_PAYMENT_METHODS,
   isPaidPlan,
   PaidPlan,
@@ -197,6 +198,7 @@ export class PaymentService {
     const frontend = this.config.getOrThrow<string>('FRONTEND_URI');
     const session = await this.stripe.billingPortal.sessions.create({
       customer: company.stripeCustomerId,
+      configuration: BILLING_PORTAL_CONFIGURATION,
       return_url: `${frontend}/company/billing`,
     });
 
